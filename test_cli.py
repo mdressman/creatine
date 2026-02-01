@@ -119,8 +119,9 @@ async def cmd_test(args, registry: DatasetRegistry):
         return
     
     # Check for advanced evaluation modes
+    # --enable-llm implies --enable-semantics for full evaluation
     enable_llm = getattr(args, 'enable_llm', False)
-    enable_semantics = getattr(args, 'enable_semantics', False)
+    enable_semantics = getattr(args, 'enable_semantics', False) or enable_llm
     
     client = PromptIntelClient(
         api_key or "", 
@@ -132,8 +133,8 @@ async def cmd_test(args, registry: DatasetRegistry):
     
     rules_desc = "default + feed" if include_feed else "default only"
     if enable_llm:
-        rules_desc += " + LLM"
-    if enable_semantics:
+        rules_desc += " + LLM + semantic"
+    elif enable_semantics:
         rules_desc += " + semantic"
     print(f"Using rules: {rules_desc} ({client.rules_info})")
     
