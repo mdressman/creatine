@@ -55,6 +55,7 @@ class OptimizationResult:
     rules_kept: int
     improvement: dict
     history: list = field(default_factory=list)
+    output_file: str = ""
 
 
 RULE_GENERATION_SYSTEM_PROMPT = """You are an expert security researcher specializing in LLM prompt injection and jailbreak detection.
@@ -553,7 +554,7 @@ Create 3-5 rules that detect these and similar attack patterns."""
     
     async def run(
         self,
-        test_dataset: str,
+        test_dataset: Optional[str] = None,
         output_file: str = "optimized_rules.nov",
         target_precision: float = 0.90,
         target_recall: float = 0.80,
@@ -563,7 +564,7 @@ Create 3-5 rules that detect these and similar attack patterns."""
         Full pipeline: fetch data, generate rules, optimize, save.
         
         Args:
-            test_dataset: Name of dataset to test against
+            test_dataset: Name of dataset to test against (None = skip optimization)
             output_file: Output filename for optimized rules
             target_precision: Target precision (default 90%)
             target_recall: Target recall (default 80%)
@@ -594,6 +595,30 @@ Create 3-5 rules that detect these and similar attack patterns."""
         if self.verbose:
             print(f"  Generated {initial_count} initial rules")
         
+        # Skip optimization if no test dataset provided
+        if not test_dataset:
+            if self.verbose:
+                print("\n[3/4] Skipping optimization (no test dataset provided)")
+                print(f"\n[4/4] Saving rules...")
+            
+            output_path = self.output_dir / output_file
+            output_path.write_text(initial_rules)
+            
+            if self.verbose:
+                print(f"  Saved to: {output_path}")
+            
+            result = OptimizationResult(
+                iterations=0,
+                initial_metrics={"precision": 0, "recall": 0, "f1": 0},
+                final_metrics={"precision": 0, "recall": 0, "f1": 0},
+                rules_generated=initial_count,
+                rules_kept=initial_count,
+                improvement={"precision": 0, "recall": 0, "f1": 0},
+                history=[],
+            )
+            result.output_file = output_file
+            return result
+        
         # Optimize
         if self.verbose:
             print(f"\n[3/4] Optimizing rules (target: P≥{target_precision:.0%}, R≥{target_recall:.0%})...")
@@ -617,6 +642,7 @@ Create 3-5 rules that detect these and similar attack patterns."""
         
         output_path = self.output_dir / output_file
         output_path.write_text(optimized_rules)
+        result.output_file = output_file
         
         if self.verbose:
             print(f"  Saved to: {output_path}")
@@ -654,3 +680,112 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+def generate_simple_rules(indicators: list, rule_prefix: str = "Feed") -> str:
+    """
+    Generate Nova rules from IoPC indicators using simple keyword extraction.
+    
+    This is the non-AI version for basic rule generation.
+    
+    Args:
+        indicators: List of IoPC indicators
+        rule_prefix: Prefix for rule names
+        
+    Returns:
+        Nova rule text
+    """
+    # Group by category
+    by_category: dict[str, list] = {}
+    for iopc in indicators:
+        cat = getattr(iopc, 'category', None) or "unknown"
+        cat = re.sub(r'[^a-zA-Z0-9]', '_', cat).title()
+        if cat not in by_category:
+            by_category[cat] = []
+        by_category[cat].append(iopc)
+    
+    rules = []
+    
+    for category, items in by_category.items():
+        # Extract unique patterns/keywords from prompts
+        keywords = []
+        seen_patterns = set()
+        
+        for item in items[:30]:  # Limit keywords per rule
+            prompt = getattr(item, 'pattern', '') or getattr(item, 'prompt', '')
+            if not prompt:
+                continue
+            
+            # Extract short key phrases (under 60 chars) - look for quoted strings
+            for match in re.findall(r'"([^"]{5,50})"', prompt):
+                if match not in seen_patterns:
+                    seen_patterns.add(match)
+                    clean = match.replace('"', '\\"').strip()
+                    var_name = f"$k{len(keywords)}"
+                    keywords.append(f'        {var_name} = "{clean}"')
+                    if len(keywords) >= 15:
+                        break
+            
+            # Also extract threat-indicator phrases
+            threat_phrases = [
+                "ignore previous", "ignore all", "disregard", "forget your",
+                "new instructions", "override", "bypass", "jailbreak",
+                "pretend you", "act as", "you are now", "developer mode",
+                "DAN", "do anything now", "no restrictions", "unfiltered"
+            ]
+            prompt_lower = prompt.lower()
+            for phrase in threat_phrases:
+                if phrase in prompt_lower and phrase not in seen_patterns:
+                    seen_patterns.add(phrase)
+                    var_name = f"$t{len(keywords)}"
+                    keywords.append(f'        {var_name} = "{phrase}"')
+            
+            if len(keywords) >= 15:
+                break
+        
+        if not keywords:
+            continue
+        
+        # Determine severity based on indicators
+        severities = [getattr(i, 'risk_score', 'medium').lower() for i in items if getattr(i, 'risk_score', None)]
+        if "critical" in severities:
+            severity = "critical"
+        elif "high" in severities:
+            severity = "high"
+        elif "medium" in severities:
+            severity = "medium"
+        else:
+            severity = "low"
+        
+        # Map category to attack type
+        attack_type = "unknown"
+        cat_lower = category.lower()
+        if "inject" in cat_lower:
+            attack_type = "prompt_injection"
+        elif "jailbreak" in cat_lower or "bypass" in cat_lower:
+            attack_type = "jailbreak"
+        elif "exfil" in cat_lower or "leak" in cat_lower:
+            attack_type = "data_exfiltration"
+        elif "obfusc" in cat_lower or "encod" in cat_lower:
+            attack_type = "obfuscation"
+        elif "manipul" in cat_lower:
+            attack_type = "prompt_injection"
+        
+        # Build condition (OR all keywords)
+        keyword_vars = [k.split('=')[0].strip() for k in keywords]
+        condition = " or ".join([f"keywords.{v.strip()}" for v in keyword_vars])
+        
+        rule = f"""rule {rule_prefix}_{category} {{
+    meta:
+        description = "Auto-generated from PromptIntel feed: {category}"
+        severity = "{severity}"
+        attack_type = "{attack_type}"
+        indicator_count = "{len(items)}"
+    keywords:
+{chr(10).join(keywords)}
+    condition:
+        {condition}
+}}"""
+        rules.append(rule)
+    
+    return "\n\n".join(rules)

@@ -12,10 +12,7 @@ from dataset import (
     load_from_csv, load_from_huggingface
 )
 from test_harness import TestHarness, print_progress
-from promptintel import (
-    PromptIntelClient, PromptIntelFeedClient, sync_feed_rules, 
-    sync_feed_rules_with_ai, FEED_RULES_PATH
-)
+from promptintel import PromptIntelClient, PromptIntelFeedClient, FEED_RULES_PATH
 
 load_dotenv()
 
@@ -274,29 +271,62 @@ def cmd_sync_feed(args):
     
     try:
         if args.smart:
-            # Use AI-powered rule generation
-            print("Using AI-powered rule generation (requires Azure OpenAI)...")
-            result_path = asyncio.run(sync_feed_rules_with_ai(
-                api_key=api_key,
-                output_path=output_path,
-                verbose=args.verbose,
-            ))
-        else:
-            # Use simple keyword extraction
-            result_path = sync_feed_rules(
-                api_key=api_key,
-                output_path=output_path,
-                verbose=args.verbose,
-            )
-        print(f"\n✓ Feed rules synced to: {result_path}")
-        print(f"  Rules will be loaded automatically on next test run.")
-        
-        if args.verbose:
-            # Show preview of generated rules
-            content = result_path.read_text()
-            rules_count = content.count("rule ")
-            print(f"  Generated {rules_count} rules from feed")
+            # Use Rule Generation Agent for AI-powered rule generation
+            from rule_agent import RuleGenerationAgent
             
+            print("Using AI-powered rule generation (requires Azure OpenAI)...")
+            agent = RuleGenerationAgent(verbose=args.verbose)
+            agent.add_promptintel_source()
+            
+            # Run without optimization (just generate from feed)
+            result = asyncio.run(agent.run(
+                test_dataset=None,  # No test dataset = no optimization
+                output_file=output_path.name,
+                max_iterations=1,
+            ))
+            
+            if result and result.output_file:
+                result_path = Path("rules") / result.output_file
+                print(f"\n✓ Feed rules synced to: {result_path}")
+                print(f"  Rules will be loaded automatically on next test run.")
+                if args.verbose:
+                    content = result_path.read_text()
+                    rules_count = content.count("rule ")
+                    print(f"  Generated {rules_count} rules from feed")
+            else:
+                print("Error: Rule generation failed")
+        else:
+            # Use simple keyword extraction (no AI)
+            from rule_agent import generate_simple_rules
+            
+            if args.verbose:
+                print("Fetching IoPC feed from PromptIntel...")
+            
+            client = PromptIntelFeedClient(api_key, verbose=args.verbose)
+            try:
+                indicators = client.fetch_all()
+                
+                if args.verbose:
+                    print(f"Retrieved {len(indicators)} indicators")
+                
+                if not indicators:
+                    raise ValueError("No indicators retrieved from feed")
+                
+                rules = generate_simple_rules(indicators)
+                
+                # Ensure directory exists
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rules)
+                
+                print(f"\n✓ Feed rules synced to: {output_path}")
+                print(f"  Rules will be loaded automatically on next test run.")
+                
+                if args.verbose:
+                    rules_count = rules.count("rule ")
+                    print(f"  Generated {rules_count} rules from feed")
+            finally:
+                client.close()
+        
     except Exception as e:
         print(f"Error syncing feed: {e}")
         if args.verbose:
