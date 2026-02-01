@@ -1,0 +1,18 @@
+# Environment
+.env
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# Reports (optional - uncomment to track)
+# reports/
+
+# Large datasets (keep only small curated ones)
+datasets/neuralchemy_*.json
+
+# OS
+.DS_Store
