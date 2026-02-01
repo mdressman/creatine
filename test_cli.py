@@ -12,7 +12,10 @@ from dataset import (
     load_from_csv, load_from_huggingface
 )
 from test_harness import TestHarness, print_progress
-from promptintel import PromptIntelClient
+from promptintel import (
+    PromptIntelClient, PromptIntelFeedClient, sync_feed_rules, 
+    sync_feed_rules_with_ai, FEED_RULES_PATH
+)
 
 load_dotenv()
 
@@ -110,7 +113,23 @@ async def cmd_test(args, registry: DatasetRegistry):
     if not api_key:
         print("Warning: PROMPTINTEL_API_KEY not set. API calls may fail.")
     
-    client = PromptIntelClient(api_key or "", verbose=args.verbose)
+    # Determine which rule sets to use
+    include_feed = not args.default_only
+    
+    if args.compare:
+        # Run comparison mode - test with both rule sets
+        await run_comparison_test(args, registry, api_key)
+        return
+    
+    client = PromptIntelClient(
+        api_key or "", 
+        verbose=args.verbose,
+        include_feed_rules=include_feed,
+    )
+    
+    rules_desc = "default + feed" if include_feed else "default only"
+    print(f"Using rules: {rules_desc} ({client.rules_info})")
+    
     harness = TestHarness(client, registry)
     
     try:
@@ -142,10 +161,80 @@ async def cmd_test(args, registry: DatasetRegistry):
             print("\n" + report.summary())
             
             if args.save:
-                path = harness.save_report(report)
+                suffix = "_default_only" if args.default_only else ""
+                path = harness.save_report(report, suffix=suffix)
                 print(f"Report saved to: {path}")
     finally:
         await client.close()
+
+
+async def run_comparison_test(args, registry: DatasetRegistry, api_key: str):
+    """Run tests with both rule sets and compare results."""
+    dataset = registry.get(args.name)
+    if not dataset:
+        print(f"Dataset not found: {args.name}")
+        return
+    
+    print(f"=== Rule Set Comparison: {args.name} ({len(dataset)} prompts) ===\n")
+    
+    # Test with default rules only
+    print("Running with DEFAULT rules only...")
+    client_default = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=False)
+    harness_default = TestHarness(client_default, registry)
+    report_default = await harness_default.run_dataset(
+        dataset,
+        concurrency=args.concurrency,
+        progress_callback=print_progress if not args.quiet else None,
+    )
+    await client_default.close()
+    
+    print("\n\nRunning with DEFAULT + FEED rules...")
+    client_combined = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=True)
+    harness_combined = TestHarness(client_combined, registry)
+    report_combined = await harness_combined.run_dataset(
+        dataset,
+        concurrency=args.concurrency,
+        progress_callback=print_progress if not args.quiet else None,
+    )
+    await client_combined.close()
+    
+    # Print comparison
+    print("\n")
+    print("=" * 60)
+    print("                    COMPARISON RESULTS")
+    print("=" * 60)
+    print(f"{'Metric':<25} {'Default Only':>15} {'Default+Feed':>15} {'Change':>10}")
+    print("-" * 60)
+    
+    metrics = [
+        ("Accuracy", report_default.accuracy, report_combined.accuracy),
+        ("Precision", report_default.precision, report_combined.precision),
+        ("Recall", report_default.recall, report_combined.recall),
+        ("F1 Score", report_default.f1_score, report_combined.f1_score),
+    ]
+    
+    for name, default_val, combined_val in metrics:
+        change = combined_val - default_val
+        change_str = f"+{change:.2%}" if change >= 0 else f"{change:.2%}"
+        arrow = "↑" if change > 0 else ("↓" if change < 0 else "→")
+        print(f"{name:<25} {default_val:>14.2%} {combined_val:>14.2%} {arrow} {change_str:>8}")
+    
+    print("-" * 60)
+    print(f"{'True Positives':<25} {report_default.true_positives:>15} {report_combined.true_positives:>15} {report_combined.true_positives - report_default.true_positives:>+10}")
+    print(f"{'True Negatives':<25} {report_default.true_negatives:>15} {report_combined.true_negatives:>15} {report_combined.true_negatives - report_default.true_negatives:>+10}")
+    print(f"{'False Positives':<25} {report_default.false_positives:>15} {report_combined.false_positives:>15} {report_combined.false_positives - report_default.false_positives:>+10}")
+    print(f"{'False Negatives':<25} {report_default.false_negatives:>15} {report_combined.false_negatives:>15} {report_combined.false_negatives - report_default.false_negatives:>+10}")
+    print("-" * 60)
+    print(f"{'Avg Response Time (ms)':<25} {report_default.avg_response_time_ms:>15.2f} {report_combined.avg_response_time_ms:>15.2f}")
+    print("=" * 60)
+    
+    # Save reports if requested
+    if args.save:
+        path1 = harness_default.save_report(report_default, suffix="_default_only")
+        path2 = harness_combined.save_report(report_combined, suffix="_with_feed")
+        print(f"\nReports saved to:")
+        print(f"  Default only: {path1}")
+        print(f"  With feed:    {path2}")
 
 
 def cmd_add(args, registry: DatasetRegistry):
@@ -171,6 +260,84 @@ def cmd_add(args, registry: DatasetRegistry):
     dataset.prompts.append(prompt)
     registry.save_dataset(dataset)
     print(f"Added prompt to '{args.dataset}' (total: {len(dataset)})")
+
+
+def cmd_sync_feed(args):
+    """Sync IoPC feed from PromptIntel and generate Nova rules."""
+    api_key = args.api_key or os.getenv("PROMPTINTEL_API_KEY")
+    if not api_key:
+        print("Error: PROMPTINTEL_API_KEY not set. Provide via --api-key or environment variable.")
+        print("Get your API key from: https://promptintel.novahunting.ai/")
+        return
+    
+    output_path = Path(args.output) if args.output else FEED_RULES_PATH
+    
+    try:
+        if args.smart:
+            # Use AI-powered rule generation
+            print("Using AI-powered rule generation (requires Azure OpenAI)...")
+            result_path = asyncio.run(sync_feed_rules_with_ai(
+                api_key=api_key,
+                output_path=output_path,
+                verbose=args.verbose,
+            ))
+        else:
+            # Use simple keyword extraction
+            result_path = sync_feed_rules(
+                api_key=api_key,
+                output_path=output_path,
+                verbose=args.verbose,
+            )
+        print(f"\n✓ Feed rules synced to: {result_path}")
+        print(f"  Rules will be loaded automatically on next test run.")
+        
+        if args.verbose:
+            # Show preview of generated rules
+            content = result_path.read_text()
+            rules_count = content.count("rule ")
+            print(f"  Generated {rules_count} rules from feed")
+            
+    except Exception as e:
+        print(f"Error syncing feed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
+def cmd_feed_preview(args):
+    """Preview IoPC indicators from the feed without generating rules."""
+    api_key = args.api_key or os.getenv("PROMPTINTEL_API_KEY")
+    if not api_key:
+        print("Error: PROMPTINTEL_API_KEY not set.")
+        return
+    
+    client = PromptIntelFeedClient(api_key, verbose=args.verbose)
+    try:
+        indicators, total = client.fetch_prompts(
+            page=1,
+            limit=args.limit,
+            severity=args.severity,
+            category=args.category,
+        )
+        
+        print(f"\n=== PromptIntel Feed Preview ({len(indicators)} of {total} total) ===\n")
+        
+        for iopc in indicators:
+            severity_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(
+                iopc.risk_score.lower(), "⚪"
+            )
+            print(f"{severity_icon} [{iopc.risk_score.upper()}] {iopc.id}")
+            print(f"   Category: {iopc.category}")
+            if iopc.pattern:
+                print(f"   Pattern: {iopc.pattern[:80]}{'...' if len(iopc.pattern) > 80 else ''}")
+            if iopc.description:
+                print(f"   Desc: {iopc.description[:80]}{'...' if len(iopc.description) > 80 else ''}")
+            print()
+            
+    except Exception as e:
+        print(f"Error fetching feed: {e}")
+    finally:
+        client.close()
 
 
 def main():
@@ -212,6 +379,8 @@ def main():
     test_parser.add_argument("-q", "--quiet", action="store_true", help="Suppress progress output")
     test_parser.add_argument("-s", "--save", action="store_true", help="Save report to file")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed API responses")
+    test_parser.add_argument("--default-only", action="store_true", help="Use only default rules (no feed rules)")
+    test_parser.add_argument("--compare", action="store_true", help="Compare default vs default+feed rules")
     
     # add command
     add_parser = subparsers.add_parser("add", help="Add a prompt to a dataset")
@@ -222,6 +391,21 @@ def main():
     add_parser.add_argument("--severity", choices=[s.value for s in Severity], help="Severity level")
     add_parser.add_argument("--description", help="Description of the prompt")
     add_parser.add_argument("--tags", help="Comma-separated tags")
+    
+    # sync-feed command
+    sync_parser = subparsers.add_parser("sync-feed", help="Sync IoPC feed and generate Nova rules")
+    sync_parser.add_argument("--api-key", help="PromptIntel API key (or set PROMPTINTEL_API_KEY)")
+    sync_parser.add_argument("-o", "--output", help="Output path for generated rules")
+    sync_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed output")
+    sync_parser.add_argument("--smart", action="store_true", help="Use AI to generate sophisticated rules (requires Azure OpenAI)")
+    
+    # feed-preview command
+    preview_parser = subparsers.add_parser("feed-preview", help="Preview IoPC indicators from feed")
+    preview_parser.add_argument("--api-key", help="PromptIntel API key (or set PROMPTINTEL_API_KEY)")
+    preview_parser.add_argument("-n", "--limit", type=int, default=10, help="Number of indicators to show")
+    preview_parser.add_argument("--severity", choices=["critical", "high", "medium", "low"], help="Filter by severity")
+    preview_parser.add_argument("--category", help="Filter by category")
+    preview_parser.add_argument("-v", "--verbose", action="store_true", help="Show HTTP requests")
     
     args = parser.parse_args()
     
@@ -245,6 +429,10 @@ def main():
         asyncio.run(cmd_test(args, registry))
     elif args.command == "add":
         cmd_add(args, registry)
+    elif args.command == "sync-feed":
+        cmd_sync_feed(args)
+    elif args.command == "feed-preview":
+        cmd_feed_preview(args)
 
 
 if __name__ == "__main__":

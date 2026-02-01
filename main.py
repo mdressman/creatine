@@ -15,10 +15,10 @@ token_provider = get_bearer_token_provider(
 
 # Shared Azure OpenAI client for all agents
 chat_client = AzureOpenAIChatClient(
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    azure_ad_token_provider=token_provider,
+    endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    ad_token_provider=token_provider,
     api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
 )
 
 # PromptIntel client for security analysis
