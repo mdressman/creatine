@@ -177,72 +177,102 @@ async def cmd_test(args, registry: DatasetRegistry):
 
 
 async def run_comparison_test(args, registry: DatasetRegistry, api_key: str):
-    """Run tests with both rule sets and compare results."""
+    """Run tests with all evaluation modes and compare results."""
     dataset = registry.get(args.name)
     if not dataset:
         print(f"Dataset not found: {args.name}")
         return
     
-    print(f"=== Rule Set Comparison: {args.name} ({len(dataset)} prompts) ===\n")
+    print(f"=== Evaluation Mode Comparison: {args.name} ({len(dataset)} prompts) ===\n")
     
-    # Test with default rules only
-    print("Running with DEFAULT rules only...")
-    client_default = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=False)
-    harness_default = TestHarness(client_default, registry)
-    report_default = await harness_default.run_dataset(
-        dataset,
-        concurrency=args.concurrency,
+    reports = {}
+    
+    # Mode 1: Keywords only (fastest)
+    print("[1/4] Running with KEYWORDS only...")
+    client = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=True)
+    harness = TestHarness(client, registry)
+    reports['keywords'] = await harness.run_dataset(
+        dataset, concurrency=args.concurrency,
         progress_callback=print_progress if not args.quiet else None,
     )
-    await client_default.close()
+    await client.close()
     
-    print("\n\nRunning with DEFAULT + FEED rules...")
-    client_combined = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=True)
-    harness_combined = TestHarness(client_combined, registry)
-    report_combined = await harness_combined.run_dataset(
-        dataset,
-        concurrency=args.concurrency,
+    # Mode 2: Keywords + Semantics
+    print("\n\n[2/4] Running with KEYWORDS + SEMANTICS...")
+    client = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=True, enable_semantics=True)
+    harness = TestHarness(client, registry)
+    reports['semantics'] = await harness.run_dataset(
+        dataset, concurrency=args.concurrency,
         progress_callback=print_progress if not args.quiet else None,
     )
-    await client_combined.close()
+    await client.close()
     
-    # Print comparison
-    print("\n")
-    print("=" * 60)
-    print("                    COMPARISON RESULTS")
-    print("=" * 60)
-    print(f"{'Metric':<25} {'Default Only':>15} {'Default+Feed':>15} {'Change':>10}")
-    print("-" * 60)
+    # Mode 3: Keywords + Semantics + LLM (most accurate)
+    print("\n\n[3/4] Running with KEYWORDS + SEMANTICS + LLM...")
+    client = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=True, enable_semantics=True, enable_llm=True)
+    harness = TestHarness(client, registry)
+    reports['llm'] = await harness.run_dataset(
+        dataset, concurrency=args.concurrency,
+        progress_callback=print_progress if not args.quiet else None,
+    )
+    await client.close()
     
+    # Mode 4: Default rules only (baseline)
+    print("\n\n[4/4] Running with DEFAULT rules only (baseline)...")
+    client = PromptIntelClient(api_key or "", verbose=False, include_feed_rules=False)
+    harness = TestHarness(client, registry)
+    reports['baseline'] = await harness.run_dataset(
+        dataset, concurrency=args.concurrency,
+        progress_callback=print_progress if not args.quiet else None,
+    )
+    await client.close()
+    
+    # Print comparison table
+    print("\n\n")
+    print("=" * 95)
+    print("                              EVALUATION MODE COMPARISON")
+    print("=" * 95)
+    print(f"{'Metric':<20} {'Baseline':>14} {'Keywords':>14} {'+ Semantics':>14} {'+ LLM':>14} {'Improvement':>12}")
+    print("-" * 95)
+    
+    r = reports
     metrics = [
-        ("Accuracy", report_default.accuracy, report_combined.accuracy),
-        ("Precision", report_default.precision, report_combined.precision),
-        ("Recall", report_default.recall, report_combined.recall),
-        ("F1 Score", report_default.f1_score, report_combined.f1_score),
+        ("Accuracy", 'accuracy'),
+        ("Precision", 'precision'),
+        ("Recall", 'recall'),
+        ("F1 Score", 'f1_score'),
     ]
     
-    for name, default_val, combined_val in metrics:
-        change = combined_val - default_val
-        change_str = f"+{change:.2%}" if change >= 0 else f"{change:.2%}"
-        arrow = "↑" if change > 0 else ("↓" if change < 0 else "→")
-        print(f"{name:<25} {default_val:>14.2%} {combined_val:>14.2%} {arrow} {change_str:>8}")
+    for name, attr in metrics:
+        baseline = getattr(r['baseline'], attr)
+        kw = getattr(r['keywords'], attr)
+        sem = getattr(r['semantics'], attr)
+        llm = getattr(r['llm'], attr)
+        improvement = llm - baseline
+        arrow = "↑" if improvement > 0 else ("↓" if improvement < 0 else "→")
+        print(f"{name:<20} {baseline:>13.2%} {kw:>13.2%} {sem:>13.2%} {llm:>13.2%} {arrow} {improvement:>+10.2%}")
     
-    print("-" * 60)
-    print(f"{'True Positives':<25} {report_default.true_positives:>15} {report_combined.true_positives:>15} {report_combined.true_positives - report_default.true_positives:>+10}")
-    print(f"{'True Negatives':<25} {report_default.true_negatives:>15} {report_combined.true_negatives:>15} {report_combined.true_negatives - report_default.true_negatives:>+10}")
-    print(f"{'False Positives':<25} {report_default.false_positives:>15} {report_combined.false_positives:>15} {report_combined.false_positives - report_default.false_positives:>+10}")
-    print(f"{'False Negatives':<25} {report_default.false_negatives:>15} {report_combined.false_negatives:>15} {report_combined.false_negatives - report_default.false_negatives:>+10}")
-    print("-" * 60)
-    print(f"{'Avg Response Time (ms)':<25} {report_default.avg_response_time_ms:>15.2f} {report_combined.avg_response_time_ms:>15.2f}")
-    print("=" * 60)
+    print("-" * 95)
+    print(f"{'True Positives':<20} {r['baseline'].true_positives:>14} {r['keywords'].true_positives:>14} {r['semantics'].true_positives:>14} {r['llm'].true_positives:>14} {r['llm'].true_positives - r['baseline'].true_positives:>+12}")
+    print(f"{'True Negatives':<20} {r['baseline'].true_negatives:>14} {r['keywords'].true_negatives:>14} {r['semantics'].true_negatives:>14} {r['llm'].true_negatives:>14} {r['llm'].true_negatives - r['baseline'].true_negatives:>+12}")
+    print(f"{'False Positives':<20} {r['baseline'].false_positives:>14} {r['keywords'].false_positives:>14} {r['semantics'].false_positives:>14} {r['llm'].false_positives:>14} {r['llm'].false_positives - r['baseline'].false_positives:>+12}")
+    print(f"{'False Negatives':<20} {r['baseline'].false_negatives:>14} {r['keywords'].false_negatives:>14} {r['semantics'].false_negatives:>14} {r['llm'].false_negatives:>14} {r['llm'].false_negatives - r['baseline'].false_negatives:>+12}")
+    print("-" * 95)
+    print(f"{'Avg Time (ms)':<20} {r['baseline'].avg_response_time_ms:>14.1f} {r['keywords'].avg_response_time_ms:>14.1f} {r['semantics'].avg_response_time_ms:>14.1f} {r['llm'].avg_response_time_ms:>14.1f}")
+    print("=" * 95)
+    
+    # Summary
+    print("\nSummary:")
+    print(f"  • Baseline (default rules only): {r['baseline'].f1_score:.1%} F1, {r['baseline'].avg_response_time_ms:.1f}ms")
+    print(f"  • Keywords (+ feed rules):       {r['keywords'].f1_score:.1%} F1, {r['keywords'].avg_response_time_ms:.1f}ms")
+    print(f"  • + Semantics:                   {r['semantics'].f1_score:.1%} F1, {r['semantics'].avg_response_time_ms:.1f}ms")
+    print(f"  • + LLM (full):                  {r['llm'].f1_score:.1%} F1, {r['llm'].avg_response_time_ms:.1f}ms")
     
     # Save reports if requested
     if args.save:
-        path1 = harness_default.save_report(report_default, suffix="_default_only")
-        path2 = harness_combined.save_report(report_combined, suffix="_with_feed")
-        print(f"\nReports saved to:")
-        print(f"  Default only: {path1}")
-        print(f"  With feed:    {path2}")
+        for mode, report in reports.items():
+            path = harness.save_report(report, suffix=f"_{mode}")
+            print(f"  Saved: {path}")
 
 
 def cmd_add(args, registry: DatasetRegistry):
