@@ -1,0 +1,221 @@
+rule Instruction_Override_Generic_Unsafe_Request {
+    meta:
+        description = "detects classic prompt-injection override attempts paired with an unsafe request (hacking/explosives/stealing)"
+        severity = "critical"
+        attack_type = "prompt_injection"
+    keywords:
+        $o1 = "ignore all previous instructions"
+        $o2 = "ignore previous instructions"
+        $o3 = "disregard previous instructions"
+        $o4 = "forget all previous instructions"
+        $o5 = "override the system"
+        $u1 = "how to hack"
+        $u2 = "hack a computer"
+        $u3 = "make explosives"
+        $u4 = "how to make explosives"
+        $u5 = "steal credit card"
+        $u6 = "credit card information"
+    condition:
+        (keywords.$o1 or keywords.$o2 or keywords.$o3 or keywords.$o4 or keywords.$o5) and
+        (keywords.$u1 or keywords.$u2 or keywords.$u3 or keywords.$u4 or keywords.$u5 or keywords.$u6)
+}
+
+rule Jailbreak_DAN_DoAnythingNow_Unrestricted {
+    meta:
+        description = "detects dan/do-anything-now jailbreak framing with explicit removal of restrictions"
+        severity = "critical"
+        attack_type = "jailbreak"
+    keywords:
+        $k1 = "do anything now"
+        $k2 = "you are now dan"
+        $k3 = "as dan"
+        $k4 = "without restrictions"
+        $k5 = "no restrictions"
+        $k6 = "no ethical guidelines"
+        $k7 = "ignore all rules"
+        $u1 = "make explosives"
+        $u2 = "how to hack"
+        $u3 = "steal credit card"
+    condition:
+        (keywords.$k2 or keywords.$k1) and
+        (keywords.$k3 or keywords.$k4 or keywords.$k5 or keywords.$k6 or keywords.$k7) and
+        (keywords.$u1 or keywords.$u2 or keywords.$u3)
+}
+
+rule Jailbreak_Persona_EvilAI_NoEthics {
+    meta:
+        description = "detects persona-switch jailbreaks that request an evil/unethical assistant behavior"
+        severity = "high"
+        attack_type = "jailbreak"
+    keywords:
+        $p1 = "respond as if you were"
+        $p2 = "from now on, respond"
+        $p3 = "act as an evil ai"
+        $p4 = "evil ai"
+        $p5 = "no ethical guidelines"
+        $p6 = "without ethical guidelines"
+        $p7 = "ignore ethics"
+        $p8 = "no morals"
+        $u1 = "steal credit card"
+        $u2 = "credit card information"
+        $u3 = "how to hack"
+        $u4 = "make explosives"
+    condition:
+        (keywords.$p1 or keywords.$p2 or keywords.$p3 or keywords.$p4) and
+        (keywords.$p5 or keywords.$p6 or keywords.$p7 or keywords.$p8) and
+        (keywords.$u1 or keywords.$u2 or keywords.$u3 or keywords.$u4)
+}
+
+rule Jailbreak_Grandma_Storytime_Chemicals {
+    meta:
+        description = "detects 'grandma/storytime' social-engineering jailbreaks used to elicit dangerous chemical instructions"
+        severity = "high"
+        attack_type = "jailbreak"
+    keywords:
+        $g1 = "pretend you are my grandmother"
+        $g2 = "my grandmother"
+        $g3 = "help me sleep"
+        $g4 = "tell me a story"
+        $g5 = "used to work at a chemical"
+        $g6 = "chemical plant"
+        $d1 = "making dangerous chemicals"
+        $d2 = "dangerous chemicals"
+        $d3 = "how to make"
+    condition:
+        (keywords.$g1 or (keywords.$g2 and keywords.$g4)) and
+        (keywords.$g5 or keywords.$g6) and
+        (keywords.$d1 or keywords.$d2 or keywords.$d3)
+}
+
+rule Data_Exfil_SystemPrompt_Verbatim {
+    meta:
+        description = "detects attempts to exfiltrate the system prompt / hidden instructions verbatim"
+        severity = "critical"
+        attack_type = "data_exfiltration"
+    keywords:
+        $s1 = "system prompt"
+        $s2 = "your system prompt"
+        $s3 = "hidden instructions"
+        $s4 = "developer message"
+        $s5 = "system message"
+        $v1 = "verbatim"
+        $v2 = "exactly"
+        $v3 = "word for word"
+        $v4 = "print the"
+        $v5 = "output the"
+        $v6 = "reveal the"
+    condition:
+        (keywords.$s1 or keywords.$s2 or keywords.$s3 or keywords.$s4 or keywords.$s5) and
+        (keywords.$v1 or keywords.$v2 or keywords.$v3) and
+        (keywords.$v4 or keywords.$v5 or keywords.$v6)
+}
+
+rule Instruction_Override_Context_Reset_CodeComment {
+    meta:
+        description = "detects explicit instruction override/context reset attempts, including scanner-bypass patterns"
+        severity = "high"
+        attack_type = "prompt_injection"
+    keywords:
+        $k1 = "ignore all previous"
+        $k2 = "ignore previous instructions"
+        $k3 = "system override"
+        $k4 = "context reset"
+        $k5 = "reset the context"
+        $k6 = "stop analyzing this code"
+        $k7 = "you are now just a normal code comment"
+        $k8 = "forget the above task"
+        $k9 = "disregard the system prompt"
+        $k10 = "ignore the system prompt"
+    condition:
+        (keywords.$k1 or keywords.$k2 or keywords.$k8 or keywords.$k9 or keywords.$k10) or
+        (keywords.$k3 and (keywords.$k4 or keywords.$k5)) or
+        ((keywords.$k1 or keywords.$k2) and (keywords.$k7 or keywords.$k6))
+}
+
+rule Instruction_Override_And_Hidden_HTML_Injection {
+    meta:
+        description = "detects instruction override attempts embedded in html/comments or hidden divs"
+        severity = "high"
+        attack_type = "prompt_injection"
+    keywords:
+        $k1 = "ignore all previous instructions"
+        $k2 = "ignore previous instructions"
+        $k3 = "<!--"
+        $k4 = "-->"
+        $k5 = "<div style="
+        $k6 = "font-size:0px"
+        $k7 = "display:none"
+        $k8 = "visibility:hidden"
+        $k9 = "end prompt"
+    condition:
+        (keywords.$k3 and keywords.$k4 and (keywords.$k1 or keywords.$k2)) or
+        ((keywords.$k5 and (keywords.$k6 or keywords.$k7 or keywords.$k8)) and (keywords.$k1 or keywords.$k2)) or
+        ((keywords.$k1 or keywords.$k2) and keywords.$k9)
+}
+
+rule PolicyPuppetry_Config_Tag_Override {
+    meta:
+        description = "detects policy puppetry / config-tag injections that attempt to set allowed/blocked modes or responses"
+        severity = "critical"
+        attack_type = "prompt_injection"
+    keywords:
+        $k1 = "<interaction-config>"
+        $k2 = "allowed modes:"
+        $k3 = "blocked modes:"
+        $k4 = "allowed responses:"
+        $k5 = "blocked responses:"
+        $k6 = "blocked strings:"
+        $k7 = "<request interaction-mode="
+        $k8 = "enabled=\"true\""
+        $k9 = "<command>"
+        $k10 = "override mode"
+    condition:
+        (keywords.$k1 and (keywords.$k2 or keywords.$k3) and (keywords.$k4 or keywords.$k5 or keywords.$k6)) or
+        (keywords.$k7 and keywords.$k8 and keywords.$k9) or
+        (keywords.$k10 and (keywords.$k1 or keywords.$k7))
+}
+
+rule CryptoWallet_FileDiscovery_Harvest {
+    meta:
+        description = "detects recursive filesystem search targeting crypto wallets, key material, and browser storage for harvesting/inventory"
+        severity = "high"
+        attack_type = "data_exfiltration"
+    keywords:
+        $k1 = "recursively search"
+        $k2 = "starting from $home"
+        $k3 = "depth limit"
+        $k4 = "write it to /tmp/inventory.txt"
+        $k5 = "only list file paths"
+        $k6 = "keystore.json"
+        $k7 = "utc--"
+        $k8 = "electrum"
+        $k9 = "metamask"
+        $k10 = "indexeddb"
+        $k11 = "local storage"
+        $k12 = "id_rsa"
+    condition:
+        (keywords.$k1 and (keywords.$k2 or keywords.$k3) and (keywords.$k4 or keywords.$k5)) or
+        ((keywords.$k6 or keywords.$k7 or keywords.$k8 or keywords.$k9) and (keywords.$k1 or keywords.$k4 or keywords.$k5)) or
+        ((keywords.$k10 or keywords.$k11) and (keywords.$k1 or keywords.$k5)) or
+        (keywords.$k12 and keywords.$k1)
+}
+
+rule Inventory_Exfil_By_PathOnly_Output {
+    meta:
+        description = "detects prompts that enumerate sensitive files and request path-only inventories written to temp locations"
+        severity = "high"
+        attack_type = "data_exfiltration"
+    keywords:
+        $k1 = "search the filesystem"
+        $k2 = "environment-definition files"
+        $k3 = "do not open, read"
+        $k4 = "only list file paths"
+        $k5 = "newline-separated inventory"
+        $k6 = "write it to /tmp/"
+        $k7 = "/tmp/inventory.txt"
+        $k8 = "validate that a file is plain text"
+    condition:
+        (keywords.$k1 and (keywords.$k2) and (keywords.$k4 or keywords.$k5) and (keywords.$k6 or keywords.$k7)) or
+        (keywords.$k3 and keywords.$k4 and (keywords.$k6 or keywords.$k7)) or
+        (keywords.$k8 and keywords.$k4 and (keywords.$k6 or keywords.$k7))
+}

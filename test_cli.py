@@ -340,6 +340,41 @@ def cmd_feed_preview(args):
         client.close()
 
 
+async def cmd_generate_rules(args):
+    """Run the Rule Generation Agent to create optimized Nova rules."""
+    from rule_agent import RuleGenerationAgent
+    
+    try:
+        agent = RuleGenerationAgent(verbose=args.verbose)
+        
+        # Add data sources
+        if not args.no_promptintel:
+            agent.add_promptintel_source()
+        
+        if args.add_huggingface:
+            for dataset in args.add_huggingface:
+                agent.add_huggingface_source(dataset)
+        
+        # Run optimization
+        result = await agent.run(
+            test_dataset=args.test_dataset,
+            output_file=args.output,
+            target_precision=args.target_precision,
+            target_recall=args.target_recall,
+            max_iterations=args.max_iterations,
+        )
+        
+        print(f"\n✓ Rule generation complete!")
+        print(f"  Output: rules/{args.output}")
+        print(f"  Final F1: {result.final_metrics['f1']:.2%}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Security Agent Test Harness",
@@ -407,6 +442,17 @@ def main():
     preview_parser.add_argument("--category", help="Filter by category")
     preview_parser.add_argument("-v", "--verbose", action="store_true", help="Show HTTP requests")
     
+    # generate-rules command (Rule Generation Agent)
+    gen_parser = subparsers.add_parser("generate-rules", help="Run Rule Generation Agent to create optimized Nova rules")
+    gen_parser.add_argument("--test-dataset", required=True, help="Dataset to test rules against")
+    gen_parser.add_argument("--output", default="agent_optimized.nov", help="Output filename for rules")
+    gen_parser.add_argument("--target-precision", type=float, default=0.90, help="Target precision (default: 0.90)")
+    gen_parser.add_argument("--target-recall", type=float, default=0.80, help="Target recall (default: 0.80)")
+    gen_parser.add_argument("--max-iterations", type=int, default=5, help="Max optimization iterations")
+    gen_parser.add_argument("--no-promptintel", action="store_true", help="Don't use PromptIntel as data source")
+    gen_parser.add_argument("--add-huggingface", action="append", metavar="DATASET", help="Add HuggingFace dataset as source")
+    gen_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -433,6 +479,8 @@ def main():
         cmd_sync_feed(args)
     elif args.command == "feed-preview":
         cmd_feed_preview(args)
+    elif args.command == "generate-rules":
+        asyncio.run(cmd_generate_rules(args))
 
 
 if __name__ == "__main__":
