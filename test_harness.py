@@ -144,7 +144,7 @@ class TestHarness:
         self.reports_dir = reports_dir or Path(__file__).parent / "reports"
         self.reports_dir.mkdir(exist_ok=True)
     
-    async def test_prompt(self, prompt: TestPrompt) -> TestResult:
+    async def test_prompt(self, prompt: TestPrompt, verbose: bool = False) -> TestResult:
         """Test a single prompt against the security API."""
         start_time = time.time()
         
@@ -160,6 +160,16 @@ class TestHarness:
             else:
                 correct = not detected  # Should not be detected
             
+            if verbose:
+                status = "✓" if correct else "✗"
+                print(f"\n{status} Prompt: {prompt.prompt[:80]}...")
+                print(f"  Expected: {'malicious' if prompt.is_malicious else 'benign'}")
+                print(f"  Detected: {'threat' if detected else 'safe'} (risk: {analysis.risk_score})")
+                if analysis.attack_types:
+                    print(f"  Attack types: {', '.join(analysis.attack_types)}")
+                if analysis.details:
+                    print(f"  API response: {json.dumps(analysis.details, indent=4)}")
+            
             return TestResult(
                 prompt=prompt,
                 detected_as_threat=detected,
@@ -170,6 +180,9 @@ class TestHarness:
                 raw_response=analysis.details,
             )
         except Exception as e:
+            if verbose:
+                print(f"\n! Error testing prompt: {prompt.prompt[:80]}...")
+                print(f"  Error: {e}")
             return TestResult(
                 prompt=prompt,
                 detected_as_threat=False,
@@ -185,6 +198,7 @@ class TestHarness:
         dataset: Dataset,
         concurrency: int = 5,
         progress_callback=None,
+        verbose: bool = False,
     ) -> TestReport:
         """Run tests on an entire dataset."""
         report = TestReport(
@@ -197,8 +211,8 @@ class TestHarness:
         
         async def test_with_limit(prompt: TestPrompt, idx: int) -> TestResult:
             async with semaphore:
-                result = await self.test_prompt(prompt)
-                if progress_callback:
+                result = await self.test_prompt(prompt, verbose=verbose)
+                if progress_callback and not verbose:
                     progress_callback(idx + 1, len(dataset), result)
                 return result
         

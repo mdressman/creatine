@@ -110,14 +110,15 @@ async def cmd_test(args, registry: DatasetRegistry):
     if not api_key:
         print("Warning: PROMPTINTEL_API_KEY not set. API calls may fail.")
     
-    client = PromptIntelClient(api_key or "")
+    client = PromptIntelClient(api_key or "", verbose=args.verbose)
     harness = TestHarness(client, registry)
     
     try:
         if args.name == "all":
             reports = await harness.run_all(
                 concurrency=args.concurrency,
-                progress_callback=print_progress if not args.quiet else None,
+                progress_callback=print_progress if not args.quiet and not args.verbose else None,
+                verbose=args.verbose,
             )
             print("\n")
             for name, report in reports.items():
@@ -135,7 +136,8 @@ async def cmd_test(args, registry: DatasetRegistry):
             report = await harness.run_dataset(
                 dataset,
                 concurrency=args.concurrency,
-                progress_callback=print_progress if not args.quiet else None,
+                progress_callback=print_progress if not args.quiet and not args.verbose else None,
+                verbose=args.verbose,
             )
             print("\n" + report.summary())
             
@@ -209,6 +211,7 @@ def main():
     test_parser.add_argument("-c", "--concurrency", type=int, default=5, help="Concurrent requests")
     test_parser.add_argument("-q", "--quiet", action="store_true", help="Suppress progress output")
     test_parser.add_argument("-s", "--save", action="store_true", help="Save report to file")
+    test_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed API responses")
     
     # add command
     add_parser = subparsers.add_parser("add", help="Add a prompt to a dataset")
