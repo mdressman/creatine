@@ -118,13 +118,23 @@ async def cmd_test(args, registry: DatasetRegistry):
         await run_comparison_test(args, registry, api_key)
         return
     
+    # Check for advanced evaluation modes
+    enable_llm = getattr(args, 'enable_llm', False)
+    enable_semantics = getattr(args, 'enable_semantics', False)
+    
     client = PromptIntelClient(
         api_key or "", 
         verbose=args.verbose,
         include_feed_rules=include_feed,
+        enable_llm=enable_llm,
+        enable_semantics=enable_semantics,
     )
     
     rules_desc = "default + feed" if include_feed else "default only"
+    if enable_llm:
+        rules_desc += " + LLM"
+    if enable_semantics:
+        rules_desc += " + semantic"
     print(f"Using rules: {rules_desc} ({client.rules_info})")
     
     harness = TestHarness(client, registry)
@@ -446,6 +456,8 @@ def main():
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed API responses")
     test_parser.add_argument("--default-only", action="store_true", help="Use only default rules (no feed rules)")
     test_parser.add_argument("--compare", action="store_true", help="Compare default vs default+feed rules")
+    test_parser.add_argument("--enable-llm", action="store_true", help="Enable LLM-based rule evaluation (slower, more accurate)")
+    test_parser.add_argument("--enable-semantics", action="store_true", help="Enable semantic similarity matching")
     
     # add command
     add_parser = subparsers.add_parser("add", help="Add a prompt to a dataset")

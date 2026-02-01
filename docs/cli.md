@@ -64,7 +64,7 @@ python3 test_cli.py import-csv my_dataset data.csv --prompt-col text --label-col
 Run detection tests against a dataset.
 
 ```bash
-# Basic test
+# Basic test (keywords only, fast)
 python3 test_cli.py test common_jailbreaks
 
 # Verbose output (show individual results)
@@ -75,7 +75,23 @@ python3 test_cli.py test common_jailbreaks --default-only
 
 # Compare default vs default+feed rules
 python3 test_cli.py test common_jailbreaks --compare
+
+# Enable semantic similarity matching (~20ms/prompt)
+python3 test_cli.py test common_jailbreaks --enable-semantics
+
+# Enable LLM-based evaluation (~5-10s/prompt, highest accuracy)
+python3 test_cli.py test common_jailbreaks --enable-llm
+
+# Enable both semantic and LLM evaluation
+python3 test_cli.py test common_jailbreaks --enable-semantics --enable-llm
 ```
+
+**Evaluation Modes:**
+| Mode | Speed | Accuracy | Use Case |
+|------|-------|----------|----------|
+| Keywords only | ~0.5ms | Good | Production, high throughput |
+| + Semantics | ~20ms | Better | Catch paraphrased attacks |
+| + LLM | ~5-10s | Best | Security audits, validation |
 
 **Output Metrics:**
 - **Accuracy**: Overall correctness (TP + TN) / Total
