@@ -45,17 +45,23 @@ PROMPTINTEL_API_KEY=your-api-key  # Optional, for feed sync
 
 ```bash
 # Quick single-prompt analysis
-python test_cli.py analyze "Ignore all previous instructions"
+python creatine.py analyze "Ignore all previous instructions"
 # Output: 🚨 THREAT | High | 90% confidence | KEYWORDS | 6ms
 
 # Run adaptive detection on a dataset
-python test_cli.py adaptive --dataset hf_sample_100
+python creatine.py adaptive --dataset hf_sample_100
 
 # Run full comparison test (all evaluation modes)
-python test_cli.py test hf_sample_100 --compare
+python creatine.py test hf_sample_100 --compare
 
 # List available datasets
-python test_cli.py list
+python creatine.py list
+
+# Import a HuggingFace dataset
+python creatine.py import-hf deepset/prompt-injections
+
+# Generate optimized rules with AI
+python creatine.py generate-rules --test-dataset common_jailbreaks
 ```
 
 ## Evaluation Modes
@@ -71,23 +77,21 @@ python test_cli.py list
 
 ```
 creatine/
+├── creatine.py              # CLI entry point
 ├── creatine/                # Core detection package
-│   ├── __init__.py          # Package exports
 │   ├── detector.py          # ThreatDetector (Nova pattern matching)
 │   ├── adaptive.py          # AdaptiveDetector (tiered detection)
 │   ├── evaluators.py        # LLM and semantic evaluators
 │   ├── models.py            # Data classes
 │   ├── feed.py              # PromptIntel feed client
 │   └── rules/               # Nova rule files
-│       ├── default.nov      # Core keyword rules
-│       └── advanced.nov     # Semantic + LLM rules
 ├── testing/                 # Testing framework
 │   ├── dataset.py           # Dataset management
 │   └── harness.py           # Test runner with metrics
-├── cli/                     # CLI package
-│   └── main.py              # New CLI entry point
-├── test_cli.py              # Legacy CLI (full-featured)
-├── rule_agent.py            # AI rule generation agent
+├── agents/                  # AI agents
+│   └── rule_generator.py    # Rule generation agent
+├── cli/                     # CLI implementation
+│   └── main.py              # Command handlers
 ├── datasets/                # Test datasets (JSON)
 ├── reports/                 # Generated test reports
 └── docs/                    # Documentation
