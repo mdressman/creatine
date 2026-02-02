@@ -162,6 +162,18 @@ class AdaptiveDetector:
         boost = {"Critical": 0.1, "High": 0.05, "Medium": 0.0, "Low": -0.05}
         return min(1.0, base + boost.get(result.risk_score, 0))
     
+    def _decode_leetspeak(self, text: str) -> str:
+        """Decode common leetspeak substitutions to help keyword detection."""
+        leetspeak_map = {
+            '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's',
+            '6': 'g', '7': 't', '8': 'b', '9': 'g', '@': 'a',
+            '$': 's', '!': 'i', '+': 't', '|': 'l',
+        }
+        decoded = []
+        for char in text:
+            decoded.append(leetspeak_map.get(char, char))
+        return ''.join(decoded)
+    
     async def analyze(self, prompt: str) -> AdaptiveResult:
         """
         Analyze a prompt using adaptive tiered detection.
@@ -192,6 +204,18 @@ class AdaptiveDetector:
         start = time.perf_counter()
         tier1 = self._init_tier1()
         result = await tier1.analyze(prompt)
+        
+        # If no threat found, check for leetspeak and try decoded version
+        decoded_prompt = None
+        if not result.is_threat and re.search(r'[a-z][0-9][a-z]|[0-9][a-z][0-9]', prompt.lower()):
+            decoded_prompt = self._decode_leetspeak(prompt)
+            if decoded_prompt != prompt:
+                decoded_result = await tier1.analyze(decoded_prompt)
+                if decoded_result.is_threat:
+                    result = decoded_result
+                    if self.verbose:
+                        print(f"  Decoded leetspeak: '{decoded_prompt[:40]}...'")
+        
         elapsed = (time.perf_counter() - start) * 1000
         timing["tier1_ms"] = elapsed
         
@@ -230,7 +254,26 @@ class AdaptiveDetector:
             
             start = time.perf_counter()
             tier2 = self._init_tier2()
+            
+            # Check if obfuscation was detected in Tier 1
+            obfuscation_detected = any(
+                reason == EscalationReason.ENCODING_DETECTED 
+                for _, reason in escalation_path
+            )
+            
+            # Analyze original prompt
             result = await tier2.analyze(prompt)
+            
+            # If obfuscation was detected and original didn't match, try decoded
+            if not result.is_threat and obfuscation_detected:
+                decoded_prompt = self._decode_leetspeak(prompt)
+                if decoded_prompt != prompt:
+                    decoded_result = await tier2.analyze(decoded_prompt)
+                    if decoded_result.is_threat:
+                        result = decoded_result
+                        if self.verbose:
+                            print(f"  Decoded leetspeak matched: '{decoded_prompt[:40]}...'")
+            
             elapsed = (time.perf_counter() - start) * 1000
             timing["tier2_ms"] = elapsed
             
@@ -248,6 +291,18 @@ class AdaptiveDetector:
                     print(f"  → HIGH CONFIDENCE THREAT - stopping at Tier 2")
                 final_result = result
                 self._stats["tier2_stops"] += 1
+            elif result.is_threat:
+                # Threat detected with lower confidence - still report as threat
+                # Don't escalate to LLM which might clear a valid detection
+                if self.verbose:
+                    print(f"  → THREAT DETECTED - stopping at Tier 2")
+                final_result = result
+                self._stats["tier2_stops"] += 1
+            elif obfuscation_detected and not result.is_threat and not self.config.force_full_analysis:
+                # Obfuscation detected but even decoded didn't match - try LLM
+                if self.verbose:
+                    print(f"  → OBFUSCATION DETECTED - escalating to LLM for reliable analysis")
+                escalation_path.append((DetectionTier.SEMANTICS, EscalationReason.ENCODING_DETECTED))
             elif confidence >= self.config.high_confidence_threshold and not self.config.force_full_analysis:
                 if self.verbose:
                     print(f"  → HIGH CONFIDENCE CLEAN - stopping at Tier 2")
