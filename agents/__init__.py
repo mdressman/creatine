@@ -2,6 +2,7 @@
 
 from .rule_generator import RuleGenerationAgent, generate_simple_rules
 from .forensics import ForensicsAgent, ForensicsReport, AttackTechnique
+from .learning import LearningPipeline, LearningResult, ProductionLog
 from .orchestrator import (
     # Base classes
     BaseAgent,
@@ -12,6 +13,7 @@ from .orchestrator import (
     DetectorAgent,
     AdaptiveDetectorAgent,
     ForensicsAgentWrapper,
+    LLMDetectorAgent,
     # Orchestration patterns
     Pipeline,
     ParallelExecutor,
@@ -34,6 +36,10 @@ __all__ = [
     "ForensicsAgent",
     "ForensicsReport",
     "AttackTechnique",
+    # Learning
+    "LearningPipeline",
+    "LearningResult",
+    "ProductionLog",
     # Orchestration base
     "BaseAgent",
     "FunctionAgent",
@@ -43,6 +49,7 @@ __all__ = [
     "DetectorAgent",
     "AdaptiveDetectorAgent",
     "ForensicsAgentWrapper",
+    "LLMDetectorAgent",
     # Orchestration patterns
     "Pipeline",
     "ParallelExecutor",

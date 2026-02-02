@@ -519,6 +519,53 @@ def cmd_forensics(args):
                 traceback.print_exc()
 
 
+def cmd_learn(args):
+    """Learn from production logs to improve detection rules."""
+    from agents.learning import LearningPipeline
+    
+    async def run():
+        pipeline = LearningPipeline(
+            min_cluster_size=args.min_cluster,
+            similarity_threshold=args.similarity,
+            min_precision=args.min_precision,
+            verbose=not args.quiet,
+        )
+        
+        if args.feedback:
+            # Learn from user feedback
+            result = await pipeline.learn_from_feedback(
+                args.logs,
+                output_file=args.output,
+            )
+        else:
+            # Learn from production logs
+            result = await pipeline.learn_from_logs(
+                args.logs,
+                validation_file=args.validation,
+                output_file=args.output,
+            )
+        
+        print(f"\n{'='*60}")
+        print("LEARNING SUMMARY")
+        print(f"{'='*60}")
+        print(f"Logs processed: {result.logs_processed}")
+        print(f"Gaps identified: {result.gaps_identified}")
+        print(f"Clusters found: {result.clusters_found}")
+        print(f"Rules generated: {len(result.new_rules)}")
+        print(f"Rules promoted: {result.rules_promoted}")
+        
+        if result.output_file:
+            print(f"\n✓ Rules saved to: {result.output_file}")
+    
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -619,6 +666,18 @@ Examples:
     p.add_argument("--json", action="store_true", help="Output raw JSON analysis")
     p.add_argument("-v", "--verbose", action="store_true")
     
+    # learn
+    p = subparsers.add_parser("learn", help="Learn from production logs to improve rules")
+    p.add_argument("logs", help="Path to JSONL file with production logs")
+    p.add_argument("-o", "--output", default="learned_rules.nov", help="Output rule file")
+    p.add_argument("--validation", help="Dataset name for rule validation")
+    p.add_argument("--feedback", action="store_true", help="Learn from user feedback (FP/FN)")
+    p.add_argument("--min-cluster", type=int, default=3, help="Min samples to form cluster")
+    p.add_argument("--similarity", type=float, default=0.75, help="Similarity threshold for clustering")
+    p.add_argument("--min-precision", type=float, default=0.9, help="Min precision for rule promotion")
+    p.add_argument("-q", "--quiet", action="store_true")
+    p.add_argument("-v", "--verbose", action="store_true")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -644,6 +703,7 @@ Examples:
         "generate-rules": cmd_generate_rules,
         "sync-feed": cmd_sync_feed,
         "forensics": cmd_forensics,
+        "learn": cmd_learn,
     }
     
     cmd_func = commands.get(args.command)
@@ -653,4 +713,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

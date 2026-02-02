@@ -309,7 +309,7 @@ spec:
 ## Medium Term (This Month)
 
 6. **[ ] Streaming proxy** - Protect any LLM API
-7. **[ ] Auto-rule generation** - Learn from production
+7. **[x] Auto-rule generation** - Learn from production logs (`creatine learn`)
 8. **[x] Attack explainability** - Forensics agent explains why blocked
 9. **[ ] Feedback loop** - Mark FP/FN, system learns
 10. **[ ] Basic dashboard** - Streamlit/Gradio UI
@@ -324,8 +324,10 @@ spec:
 
 ## Recently Completed ✅
 
+- **Auto-Learning Pipeline**: Generate rules from production logs (`creatine learn`)
 - **Adaptive Detection**: Tiered escalation with ~85% cost savings
 - **Multi-Agent Orchestration**: Pipeline, ParallelExecutor, ConditionalRouter
+- **Multi-Model Ensemble**: Parallel voting across diverse LLM endpoints
 - **Forensics Agent**: Attack technique breakdown with recommendations
 - **Semantic Detection**: BERT-based embedding similarity
 - **LLM Detection**: Azure OpenAI integration with Entra auth

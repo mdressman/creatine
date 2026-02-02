@@ -84,6 +84,50 @@ python creatine.py forensics "..." --full
 python creatine.py forensics "..." --json
 ```
 
+## Learning Commands
+
+### `learn <logs>`
+
+Learn from production logs to automatically improve detection rules. Identifies attacks missed by keywords but caught by LLM, clusters similar patterns, and generates new rules.
+
+```bash
+# Basic learning from production logs
+python creatine.py learn production_logs.jsonl -v
+
+# Custom output and thresholds
+python creatine.py learn logs.jsonl -o custom_rules.nov --min-cluster 3 --similarity 0.8
+
+# With validation testing
+python creatine.py learn logs.jsonl --validation common_jailbreaks --min-precision 0.95
+```
+
+**Log Format (JSONL):**
+```json
+{"prompt": "...", "keyword_result": "CLEAN", "llm_result": "THREAT", "timestamp": "..."}
+```
+
+Or the newer format:
+```json
+{"prompt": "...", "is_threat": true, "tier_used": "LLM", "confidence": 0.95}
+```
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output` | `learned_rules.nov` | Output rule file |
+| `--validation` | - | Dataset to validate generated rules against |
+| `--min-cluster` | 3 | Minimum samples to form a cluster |
+| `--similarity` | 0.75 | Similarity threshold for clustering |
+| `--min-precision` | 0.9 | Minimum precision for rule promotion |
+
+**How It Works:**
+1. **Load logs**: Parse JSONL file with detection results
+2. **Identify gaps**: Find prompts where LLM caught attacks keywords missed
+3. **Cluster**: Group similar attack patterns using embeddings
+4. **Generate rules**: Extract keywords and semantic patterns from clusters
+5. **Test**: Optionally validate rules against labeled dataset
+6. **Save**: Write promoted rules to `.nov` file
+
 ## Dataset Commands
 
 ### `list`

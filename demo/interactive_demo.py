@@ -430,6 +430,7 @@ Creatine provides a comprehensive CLI for all operations:
         ("python creatine.py import-csv data.csv", "Import from CSV file"),
         ("python creatine.py generate-rules --test-dataset ds", "Generate rules with AI"),
         ("python creatine.py sync-feed", "Sync rules from PromptIntel"),
+        ("python creatine.py learn logs.jsonl -v", "Learn from production logs"),
     ]
     
     for cmd, desc in commands:
