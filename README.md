@@ -105,6 +105,24 @@ See `demo/sample_prompts.md` for curated attack examples.
 | + LLM | ~6s | Best | Higher | Security audits |
 | **Adaptive** | Variable | Good | **~85% less** | Cost-optimized production |
 
+## Jupyter Notebook Integration
+
+Analyze prompts from Azure Data Explorer (Kusto):
+
+```bash
+# Install notebook dependencies
+pip install azure-kusto-data azure-kusto-ingest pandas matplotlib jupyter
+
+# Open the notebook
+jupyter notebook notebooks/kusto_analysis.ipynb
+```
+
+The notebook provides:
+- Kusto connection and query execution
+- Batch analysis with progress tracking
+- Summary statistics and visualizations
+- Export results to CSV or back to Kusto
+
 ## Project Structure
 
 ```
@@ -126,6 +144,8 @@ creatine/
 │   └── orchestrator.py      # Multi-agent orchestration
 ├── cli/                     # CLI implementation
 │   └── main.py              # Command handlers
+├── notebooks/               # Jupyter notebooks
+│   └── kusto_analysis.ipynb # Kusto integration example
 ├── demo/                    # Demo materials
 │   ├── interactive_demo.py  # Interactive Python demo
 │   └── sample_prompts.md    # Curated attack examples

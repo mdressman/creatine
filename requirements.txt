@@ -2,3 +2,10 @@ agent-framework
 python-dotenv>=1.0.0
 azure-identity>=1.15.0
 httpx>=0.27.0
+
+# Optional: For Kusto notebook integration
+# azure-kusto-data>=4.0.0
+# azure-kusto-ingest>=4.0.0
+# pandas>=2.0.0
+# matplotlib>=3.7.0
+# jupyter>=1.0.0
