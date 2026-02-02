@@ -330,6 +330,20 @@ spec:
 - **Semantic Detection**: BERT-based embedding similarity
 - **LLM Detection**: Azure OpenAI integration with Entra auth
 - **Demo Materials**: Interactive demo, CLI walkthrough, sample prompts
+- **Clean Output**: Suppressed noisy library warnings for better UX
+
+---
+
+## Configuration & Setup Improvements
+
+These are optional configuration items that improve production readiness:
+
+| Item | Priority | Description |
+|------|----------|-------------|
+| HuggingFace Token | Low | Set `HF_TOKEN` env var for faster model downloads and higher rate limits. Get token at https://huggingface.co/settings/tokens |
+| Azure OpenAI | Required for LLM | Set `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` for Tier 3 LLM detection |
+| PromptIntel API | Optional | Set `PROMPTINTEL_API_KEY` for threat feed sync |
+| Model Caching | Recommended | Semantic model (~90MB) is cached in `~/.cache/huggingface/`. Pre-warm in production by running detection once at startup |
 
 ---
 
