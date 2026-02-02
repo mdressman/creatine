@@ -30,6 +30,32 @@
   - Comprehensive testing with precision, recall, and F1 metrics
   - Jupyter notebook integration for Kusto/Azure Data Explorer
 
+## Demo
+
+Run the interactive demo to see Creatine in action:
+
+```bash
+# Interactive menu (select specific sections)
+python demo/interactive_demo.py
+
+# Quick 2-minute demo
+python demo/interactive_demo.py --quick
+
+# Full interactive demo (all sections)
+python demo/interactive_demo.py --full
+
+# Run specific section (1-6)
+python demo/interactive_demo.py --section 3  # Multi-agent orchestration
+```
+
+The demo covers:
+- Multi-tier detection (Keywords → Semantics → LLM)
+- Adaptive cost-optimized escalation
+- Multi-agent orchestration (pipelines, ensembles)
+- Forensics analysis with attack technique breakdown
+
+See `demo/sample_prompts.md` for curated attack examples.
+
 ## Quick Start
 
 ### Installation
@@ -109,32 +135,6 @@ The learning pipeline:
 2. Clusters similar attack patterns using embeddings
 3. Extracts keywords and generates new detection rules
 4. Optionally validates against labeled datasets
-
-## Demo
-
-Run the interactive demo to see Creatine in action:
-
-```bash
-# Interactive menu (select specific sections)
-python demo/interactive_demo.py
-
-# Quick 2-minute demo
-python demo/interactive_demo.py --quick
-
-# Full interactive demo (all sections)
-python demo/interactive_demo.py --full
-
-# Run specific section (1-6)
-python demo/interactive_demo.py --section 3  # Multi-agent orchestration
-```
-
-The demo covers:
-- Multi-tier detection (Keywords → Semantics → LLM)
-- Adaptive cost-optimized escalation
-- Multi-agent orchestration (pipelines, ensembles)
-- Forensics analysis with attack technique breakdown
-
-See `demo/sample_prompts.md` for curated attack examples.
 
 ## Evaluation Modes
 

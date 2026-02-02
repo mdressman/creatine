@@ -8,8 +8,8 @@ __pycache__/
 .vscode/
 .idea/
 
-# Reports (optional - uncomment to track)
-# reports/
+# Reports
+reports/
 
 # Detection logs (for learning pipeline)
 logs/
