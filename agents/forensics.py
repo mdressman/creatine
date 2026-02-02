@@ -163,12 +163,27 @@ class ForensicsAgent:
         # Build analysis request
         context = ""
         if detection_result:
+            # Handle both dict and object access
+            if isinstance(detection_result, dict):
+                is_threat = detection_result.get('is_threat', 'unknown')
+                risk_score = detection_result.get('risk_score', 'unknown')
+                attack_types = detection_result.get('attack_types', [])
+                matches = detection_result.get('details', {}).get('matches', [])
+                rules_matched = [m.get('rule') for m in matches] if matches else []
+            else:
+                is_threat = getattr(detection_result, 'is_threat', 'unknown')
+                risk_score = getattr(detection_result, 'risk_score', 'unknown')
+                attack_types = getattr(detection_result, 'attack_types', [])
+                details = getattr(detection_result, 'details', {})
+                matches = details.get('matches', []) if isinstance(details, dict) else []
+                rules_matched = [m.get('rule') for m in matches] if matches else []
+            
             context = f"""
 Detection Result:
-- Is Threat: {detection_result.get('is_threat', 'unknown')}
-- Risk Score: {detection_result.get('risk_score', 'unknown')}
-- Attack Types: {detection_result.get('attack_types', [])}
-- Rules Matched: {[m.get('rule') for m in detection_result.get('details', {}).get('matches', [])]}
+- Is Threat: {is_threat}
+- Risk Score: {risk_score}
+- Attack Types: {attack_types}
+- Rules Matched: {rules_matched}
 """
         
         user_prompt = f"""Analyze this prompt for attack techniques:

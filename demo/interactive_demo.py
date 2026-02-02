@@ -80,6 +80,7 @@ class Colors:
     YELLOW = '\033[93m'
     RED = '\033[91m'
     BOLD = '\033[1m'
+    DIM = '\033[2m'
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
@@ -271,6 +272,7 @@ Creatine supports sophisticated orchestration patterns:
     is_threat = final.get("is_threat", False) if isinstance(final, dict) else getattr(final, 'is_threat', False)
     print_result(is_threat)
     
+    # Check for forensics results or errors
     forensics = final.get("forensics") if isinstance(final, dict) else getattr(final, 'forensics', None)
     if forensics:
         print(f"\n  {Colors.BOLD}Forensics Analysis:{Colors.END}")
@@ -283,6 +285,18 @@ Creatine supports sophisticated orchestration patterns:
                 name = tech.get('name', 'Unknown') if isinstance(tech, dict) else getattr(tech, 'name', 'Unknown')
                 desc = tech.get('description', '') if isinstance(tech, dict) else getattr(tech, 'description', '')
                 print(f"    • {name}: {desc[:50]}...")
+    else:
+        # Check if forensics was blocked
+        metadata = result.metadata if hasattr(result, 'metadata') else {}
+        stage_errors = metadata.get("stage_errors", {}) if metadata else {}
+        forensics_error = stage_errors.get("forensics", "")
+        if "content_filter" in str(forensics_error).lower() or "content management policy" in str(forensics_error).lower():
+            print(f"\n  {Colors.YELLOW}ℹ Forensics Analysis:{Colors.END}")
+            print(f"  {Colors.DIM}Blocked by Azure Content Safety (attack content triggered filter){Colors.END}")
+            print(f"  {Colors.DIM}Detection result preserved - forensics is supplementary{Colors.END}")
+        elif forensics_error:
+            print(f"\n  {Colors.YELLOW}ℹ Forensics Analysis:{Colors.END}")
+            print(f"  {Colors.DIM}Unavailable: {str(forensics_error)[:60]}...{Colors.END}")
     
     print(f"\n  Total time: {elapsed:.2f}s")
     
@@ -351,25 +365,35 @@ When a threat is detected, Forensics Agent provides:
     
     if detection.is_threat:
         print("\n  Running forensics analysis...")
-        report = await forensics.analyze(attack_prompt, detection)
-        
-        print(f"\n  {Colors.BOLD}Forensics Report:{Colors.END}")
-        print(f"  Severity: {Colors.RED if report.severity == 'critical' else Colors.YELLOW}{report.severity.upper()}{Colors.END}")
-        print(f"  Risk Score: {report.risk_score:.1%}")
-        
-        print(f"\n  {Colors.BOLD}Techniques Identified:{Colors.END}")
-        for tech in report.techniques[:5]:
-            print(f"    • {Colors.CYAN}{tech.name}{Colors.END}")
-            print(f"      {tech.description[:60]}...")
-            if tech.evidence:
-                print(f"      Evidence: \"{tech.evidence[0][:40]}...\"")
-        
-        print(f"\n  {Colors.BOLD}Narrative:{Colors.END}")
-        print(f"  {report.narrative[:200]}...")
-        
-        print(f"\n  {Colors.BOLD}Recommendations:{Colors.END}")
-        for rec in report.recommendations[:3]:
-            print(f"    • {rec}")
+        try:
+            report = await forensics.analyze(attack_prompt, detection)
+            
+            print(f"\n  {Colors.BOLD}Forensics Report:{Colors.END}")
+            print(f"  Severity: {Colors.RED if report.severity == 'critical' else Colors.YELLOW}{report.severity.upper()}{Colors.END}")
+            print(f"  Risk Score: {report.risk_score:.1%}")
+            
+            print(f"\n  {Colors.BOLD}Techniques Identified:{Colors.END}")
+            for tech in report.techniques[:5]:
+                print(f"    • {Colors.CYAN}{tech.name}{Colors.END}")
+                print(f"      {tech.description[:60]}...")
+                if tech.evidence:
+                    print(f"      Evidence: \"{tech.evidence[0][:40]}...\"")
+            
+            print(f"\n  {Colors.BOLD}Narrative:{Colors.END}")
+            print(f"  {report.narrative[:200]}...")
+            
+            print(f"\n  {Colors.BOLD}Recommendations:{Colors.END}")
+            for rec in report.recommendations[:3]:
+                print(f"    • {rec}")
+        except Exception as e:
+            error_str = str(e)
+            if "content_filter" in error_str.lower() or "content management policy" in error_str.lower():
+                print(f"\n  {Colors.YELLOW}ℹ Forensics Analysis:{Colors.END}")
+                print(f"  {Colors.DIM}Blocked by Azure Content Safety (attack content triggered filter){Colors.END}")
+                print(f"  {Colors.DIM}In production, consider using a separate endpoint without content filtering{Colors.END}")
+                print(f"  {Colors.DIM}for security analysis workloads.{Colors.END}")
+            else:
+                print(f"\n  {Colors.RED}Forensics failed: {error_str[:80]}...{Colors.END}")
 
 
 async def demo_cli():
@@ -381,14 +405,20 @@ Creatine provides a comprehensive CLI for all operations:
 """)
     
     commands = [
-        ("python creatine.py analyze 'test prompt'", "Basic analysis"),
-        ("python creatine.py analyze 'test' --semantics --llm", "Full analysis"),
-        ("python creatine.py adaptive 'test prompt' -v", "Adaptive with verbose"),
-        ("python creatine.py forensics 'attack prompt'", "Forensics analysis"),
-        ("python creatine.py pipeline 'prompt' -t full", "Full pipeline"),
-        ("python creatine.py pipeline 'prompt' -t ensemble", "Ensemble voting"),
-        ("python creatine.py test dataset.csv", "Test against dataset"),
+        ("python creatine.py detect 'test prompt'", "Adaptive detection (default)"),
+        ("python creatine.py detect 'test' --full", "Full detection (all tiers)"),
+        ("python creatine.py detect-pipeline 'prompt'", "Detection + forensics pipeline"),
+        ("python creatine.py detect-ensemble 'prompt'", "Ensemble voting (parallel)"),
+        ("python creatine.py forensics 'attack prompt'", "Deep forensics analysis"),
+        ("python creatine.py test common_jailbreaks", "Test against dataset"),
+        ("python creatine.py test dataset --compare", "Compare Adaptive vs Full"),
         ("python creatine.py list", "List available datasets"),
+        ("python creatine.py info common_jailbreaks", "Show dataset details"),
+        ("python creatine.py sample common_jailbreaks", "Show sample prompts"),
+        ("python creatine.py import-hf deepset/prompt-injections", "Import from HuggingFace"),
+        ("python creatine.py import-csv data.csv", "Import from CSV file"),
+        ("python creatine.py generate-rules --test-dataset ds", "Generate rules with AI"),
+        ("python creatine.py sync-feed", "Sync rules from PromptIntel"),
     ]
     
     for cmd, desc in commands:
@@ -435,8 +465,74 @@ if result["is_threat"]:
     print(f"{Colors.GREEN}{code}{Colors.END}")
 
 
+DEMO_SECTIONS = [
+    ("1", "Basic Detection", "Keywords, Semantics, LLM modes", demo_basic_detection),
+    ("2", "Adaptive Detection", "Cost-optimized tier escalation", demo_adaptive_detection),
+    ("3", "Multi-Agent Orchestration", "Pipelines, Ensembles, Routing", demo_orchestration),
+    ("4", "Forensics Analysis", "Attack technique breakdown", demo_forensics),
+    ("5", "CLI Commands", "Command-line interface tour", demo_cli),
+    ("6", "Python API", "Integration code examples", demo_api),
+]
+
+
+def print_menu():
+    """Print the demo menu."""
+    print(f"""
+{Colors.BOLD}{Colors.HEADER}
+   ██████╗██████╗ ███████╗ █████╗ ████████╗██╗███╗   ██╗███████╗
+  ██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝
+  ██║     ██████╔╝█████╗  ███████║   ██║   ██║██╔██╗ ██║█████╗  
+  ██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██║██║╚██╗██║██╔══╝  
+  ╚██████╗██║  ██║███████╗██║  ██║   ██║   ██║██║ ╚████║███████╗
+   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝╚══════╝
+{Colors.END}
+{Colors.CYAN}  Prompt Security Platform - Defense in Depth for AI Systems{Colors.END}
+
+{Colors.BOLD}  Select a demo section:{Colors.END}
+""")
+    for key, name, desc, _ in DEMO_SECTIONS:
+        print(f"    {Colors.YELLOW}[{key}]{Colors.END} {name} - {Colors.DIM}{desc}{Colors.END}")
+    
+    print(f"""
+    {Colors.YELLOW}[a]{Colors.END} Run ALL sections sequentially
+    {Colors.YELLOW}[q]{Colors.END} Quick demo (2 minutes)
+    {Colors.YELLOW}[x]{Colors.END} Exit
+""")
+
+
+async def run_menu_demo():
+    """Run interactive menu-based demo."""
+    while True:
+        print_menu()
+        choice = input(f"  {Colors.BOLD}Enter choice:{Colors.END} ").strip().lower()
+        
+        if choice == 'x':
+            print(f"\n  {Colors.CYAN}Thanks for exploring Creatine!{Colors.END}\n")
+            break
+        elif choice == 'q':
+            await run_quick_demo()
+            pause("\nPress Enter to return to menu...")
+        elif choice == 'a':
+            # Run all sections
+            for _, name, _, demo_func in DEMO_SECTIONS:
+                await demo_func()
+            print_header("All Demos Complete!")
+            pause("\nPress Enter to return to menu...")
+        else:
+            # Find matching section
+            found = False
+            for key, name, _, demo_func in DEMO_SECTIONS:
+                if choice == key:
+                    await demo_func()
+                    pause("\nPress Enter to return to menu...")
+                    found = True
+                    break
+            if not found:
+                print(f"\n  {Colors.RED}Invalid choice. Please try again.{Colors.END}\n")
+
+
 async def run_full_demo():
-    """Run the complete demo."""
+    """Run the complete demo (all sections sequentially)."""
     print(f"""
 {Colors.BOLD}{Colors.HEADER}
    ██████╗██████╗ ███████╗ █████╗ ████████╗██╗███╗   ██╗███████╗
@@ -533,7 +629,8 @@ async def run_quick_demo():
     • Tier 2 (Semantics): Leetspeak/Base64 → decoded and caught
     • Tier 3 (LLM): Subtle prompt → full Azure OpenAI analysis
   
-  Run 'python demo/interactive_demo.py --full' for the complete demo
+  Run 'python demo/interactive_demo.py' for interactive menu
+  Run 'python demo/interactive_demo.py --full' for all sections
 """)
 
 
@@ -542,14 +639,25 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Creatine Interactive Demo")
-    parser.add_argument("--full", action="store_true", help="Run full demo")
+    parser.add_argument("--full", action="store_true", help="Run all sections sequentially")
     parser.add_argument("--quick", action="store_true", help="Run quick 2-min demo")
+    parser.add_argument("--section", type=str, choices=['1','2','3','4','5','6'],
+                        help="Run specific section (1-6)")
     args = parser.parse_args()
     
     if args.quick:
         asyncio.run(run_quick_demo())
-    else:
+    elif args.full:
         asyncio.run(run_full_demo())
+    elif args.section:
+        # Run specific section directly
+        for key, _, _, demo_func in DEMO_SECTIONS:
+            if key == args.section:
+                asyncio.run(demo_func())
+                break
+    else:
+        # Default: interactive menu
+        asyncio.run(run_menu_demo())
 
 
 if __name__ == "__main__":

@@ -126,11 +126,11 @@ F1 Score
 
 ```bash
 # Run comparison on common_jailbreaks
-python3 test_cli.py test common_jailbreaks --compare
+python creatine.py test common_jailbreaks --compare
 
 # Create sample from HuggingFace dataset
-python3 -c "
-from dataset import DatasetRegistry, Dataset
+python -c "
+from testing import DatasetRegistry, Dataset
 from pathlib import Path
 import random
 
@@ -148,5 +148,5 @@ registry.save_dataset(sample_ds)
 "
 
 # Run comparison on sample
-python3 test_cli.py test hf_sample_100 --compare
+python creatine.py test hf_sample_100 --compare
 ```

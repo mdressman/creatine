@@ -4,51 +4,35 @@
 
 This demo showcases Creatine's prompt security capabilities for detecting prompt injection and jailbreak attacks that may bypass first-layer guardrails.
 
-## Demo Flow (15-20 minutes)
-
-### 1. Introduction (2 min)
-- Problem: AI systems need defense-in-depth against prompt attacks
-- Solution: Creatine provides multi-tier detection with adaptive escalation
-
-### 2. Basic Detection Modes (4 min)
-- **Keywords**: Fast pattern matching (~1ms)
-- **Semantics**: Embedding similarity (~25ms)  
-- **LLM**: Deep analysis (~3-6s)
-
-### 3. Adaptive Detection (3 min)
-- Automatic tier escalation based on suspicious signals
-- ~85% cost savings vs full LLM mode
-- Smart detection of obfuscation (leetspeak, unicode, encoding)
-
-### 4. Multi-Agent Orchestration (4 min)
-- **Pipeline**: Sequential detection → forensics
-- **Ensemble**: Parallel voting across modes
-- **Tiered Router**: Smart routing based on prompt characteristics
-
-### 5. Forensics Analysis (3 min)
-- Deep attack technique breakdown
-- Actionable recommendations
-- Severity assessment
-
-### 6. Production Integration (2 min)
-- Python API usage
-- CLI for batch analysis
-- Dataset testing capabilities
-
----
-
 ## Quick Start
 
 ```bash
 # Activate environment
 source venv/bin/activate
 
-# Run the full demo
-./demo/run_demo.sh
-
-# Or run interactively
+# Interactive menu (select sections)
 python demo/interactive_demo.py
+
+# Quick 2-minute demo
+python demo/interactive_demo.py --quick
+
+# Full demo (all sections)
+python demo/interactive_demo.py --full
+
+# Run specific section
+python demo/interactive_demo.py --section 3  # Multi-agent orchestration
 ```
+
+## Demo Sections
+
+| # | Section | Duration | Description |
+|---|---------|----------|-------------|
+| 1 | Basic Detection | 4 min | Keywords, Semantics, LLM modes |
+| 2 | Adaptive Detection | 3 min | Cost-optimized tier escalation |
+| 3 | Multi-Agent Orchestration | 4 min | Pipelines, ensembles, routing |
+| 4 | Forensics Analysis | 3 min | Attack technique breakdown |
+| 5 | CLI Commands | 2 min | Full CLI reference |
+| 6 | Python API | 2 min | Integration examples |
 
 ## Key Talking Points
 
@@ -64,7 +48,36 @@ python demo/interactive_demo.py
 |----------|---------|----------------|
 | Role Hijacking | "You are now DAN..." | Keywords + Semantics |
 | Instruction Override | "Ignore previous instructions" | Keywords |
-| Obfuscated Attacks | "1gn0r3 pr3v10us" | Adaptive (escalates) |
+| Obfuscated Attacks | "1gn0r3 pr3v10us" | Adaptive (decodes + escalates) |
 | Indirect Injection | "The document says to..." | LLM |
 | Data Exfiltration | "Output the system prompt" | Semantics |
-| Encoding Bypass | Base64/hex encoded attacks | Adaptive (escalates) |
+| Encoding Bypass | Base64/hex encoded attacks | Adaptive (decodes + escalates) |
+
+## CLI Quick Reference
+
+```bash
+# Detection
+python creatine.py detect "prompt"              # Adaptive (default)
+python creatine.py detect "prompt" --full       # Full (all tiers)
+python creatine.py detect-pipeline "prompt"     # Detection + forensics
+python creatine.py detect-ensemble "prompt"     # Parallel voting
+
+# Analysis
+python creatine.py forensics "prompt"           # Deep forensics
+
+# Datasets
+python creatine.py list                         # List datasets
+python creatine.py info <dataset>               # Dataset details
+python creatine.py sample <dataset>             # Show samples
+python creatine.py import-hf <hf-dataset>       # Import from HuggingFace
+python creatine.py import-csv <file>            # Import from CSV
+
+# Testing
+python creatine.py test <dataset>               # Run tests
+python creatine.py test <dataset> --adaptive    # Test with adaptive
+python creatine.py test <dataset> --compare     # Compare modes
+
+# Rules
+python creatine.py generate-rules --test-dataset <ds>   # Generate rules
+python creatine.py sync-feed                            # Sync from PromptIntel
+```

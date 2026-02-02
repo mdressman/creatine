@@ -18,62 +18,152 @@ def get_registry():
 
 
 # =============================================================================
-# Analysis Commands
+# Detection Commands
 # =============================================================================
 
-def cmd_analyze(args):
-    """Quick single-prompt analysis."""
-    from creatine import AdaptiveDetector
+def cmd_detect(args):
+    """Run detection on a prompt."""
+    from creatine import AdaptiveDetector, ThreatDetector, AdaptiveConfig
     
     async def run():
-        detector = AdaptiveDetector(verbose=args.verbose)
-        result = await detector.analyze(args.prompt)
-        
-        status = "🚨 THREAT" if result.is_threat else "✅ SAFE"
-        print(f"{status} | {result.risk_score} | {result.confidence:.0%} confidence | {result.tier_used.name} | {result.total_time_ms:.0f}ms")
-        
-        if result.attack_types:
-            print(f"   Attack types: {', '.join(result.attack_types)}")
+        if args.mode == "adaptive":
+            # Adaptive mode - escalates through tiers as needed
+            config = AdaptiveConfig(
+                high_confidence_threshold=args.confidence_threshold or 0.85,
+            )
+            detector = AdaptiveDetector(config=config, verbose=args.verbose)
+            result = await detector.analyze(args.prompt)
+            
+            status = "🚨 THREAT" if result.is_threat else "✅ SAFE"
+            print(f"{status} | {result.risk_score} | {result.confidence:.0%} confidence | Tier: {result.tier_used.name} | {result.total_time_ms:.0f}ms")
+            
+            if result.attack_types:
+                print(f"   Attack types: {', '.join(result.attack_types)}")
+            if args.verbose:
+                print(f"   Cost saved: {result.cost_saved}")
+        else:
+            # Full mode - runs all three tiers
+            detector = ThreatDetector(
+                verbose=args.verbose,
+                enable_semantics=True,
+                enable_llm=True,
+            )
+            result = await detector.analyze(args.prompt)
+            
+            status = "🚨 THREAT" if result.is_threat else "✅ SAFE"
+            print(f"{status} | {result.risk_score} | {result.confidence:.0%} confidence | {result.response_time_ms:.0f}ms")
+            
+            if result.attack_types:
+                print(f"   Attack types: {', '.join(result.attack_types)}")
     
     asyncio.run(run())
 
 
-def cmd_adaptive(args):
-    """Run adaptive tiered detection."""
-    from creatine import AdaptiveDetector, AdaptiveConfig
-    
-    config = AdaptiveConfig(
-        high_confidence_threshold=args.confidence_threshold,
-        max_time_budget_ms=args.time_budget,
-        force_full_analysis=args.force_full,
-    )
+def cmd_detect_pipeline(args):
+    """Run detection pipeline (detect → forensics if threat)."""
+    from agents import create_detection_pipeline
     
     async def run():
-        detector = AdaptiveDetector(config=config, verbose=args.verbose)
-        registry = get_registry()
+        pipeline = create_detection_pipeline(include_forensics=True)
         
-        if args.prompt:
-            result = await detector.analyze(args.prompt)
+        print(f"Running detection pipeline...")
+        print(f"Prompt: {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
+        print()
+        
+        result = await pipeline.run(args.prompt)
+        
+        # Display detection result
+        final = result.final_result
+        if final:
+            is_threat = final.get("is_threat", False) if isinstance(final, dict) else getattr(final, 'is_threat', False)
+            status = "🚨 THREAT" if is_threat else "✅ SAFE"
+            risk = final.get("risk_score", "Unknown") if isinstance(final, dict) else getattr(final, 'risk_score', 'Unknown')
+            tier = final.get("tier_used", "Unknown") if isinstance(final, dict) else getattr(final, 'tier_used', 'Unknown')
+            print(f"{status} | Risk: {risk} | Tier: {tier}")
+        
+        # Check for forensics errors
+        metadata = result.metadata if hasattr(result, 'metadata') else {}
+        stage_errors = metadata.get("stage_errors", {}) if metadata else {}
+        if "forensics" in stage_errors:
+            error = str(stage_errors["forensics"])
+            if "content_filter" in error.lower() or "content management policy" in error.lower():
+                print(f"\nℹ Forensics blocked by Azure Content Safety")
+            else:
+                print(f"\nForensics error: {error[:80]}...")
+        
+        print(f"\nPipeline: {' → '.join(result.execution_path)}")
+        print(f"Total time: {result.total_time_ms:.0f}ms")
+    
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
+def cmd_detect_ensemble(args):
+    """Run ensemble detection (parallel voting across modes)."""
+    from agents import create_ensemble_detector
+    
+    async def run():
+        ensemble = create_ensemble_detector()
+        
+        print(f"Running ensemble detection (parallel voting)...")
+        print(f"Prompt: {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
+        print()
+        
+        result = await ensemble.run(args.prompt)
+        
+        final = result.final_result
+        if final:
+            is_threat = final.get("is_threat", False) if isinstance(final, dict) else False
+            votes = final.get("votes", {}) if isinstance(final, dict) else {}
+            status = "🚨 THREAT" if is_threat else "✅ SAFE"
+            print(f"{status}")
+            if votes:
+                print(f"Votes: {votes}")
+        
+        print(f"\nAgents: {', '.join(result.execution_path)}")
+        print(f"Total time: {result.total_time_ms:.0f}ms (parallel)")
+    
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
+# =============================================================================
+# Test Commands
+# =============================================================================
+
+def cmd_test(args):
+    """Run tests on a dataset."""
+    from creatine import ThreatDetector, AdaptiveDetector
+    from testing import TestHarness, print_progress
+    
+    registry = get_registry()
+    
+    if args.compare:
+        asyncio.run(run_comparison_test(args, registry))
+        return
+    
+    if args.mode == "adaptive":
+        # Use adaptive detector for testing
+        async def run_adaptive():
+            from creatine import AdaptiveDetector
+            detector = AdaptiveDetector(verbose=args.verbose)
             
-            print(f"\n{'='*60}")
-            print(f"{'🚨 THREAT DETECTED' if result.is_threat else '✅ CLEAN'}")
-            print(f"{'='*60}")
-            print(f"Confidence: {result.confidence:.1%}")
-            print(f"Risk Score: {result.risk_score}")
-            print(f"Tier Used: {result.tier_used.name}")
-            print(f"Total Time: {result.total_time_ms:.1f}ms")
-            print(f"Cost Saved: {result.cost_saved}")
-            
-            if result.attack_types:
-                print(f"Attack Types: {', '.join(result.attack_types)}")
-                
-        elif args.dataset:
-            dataset = registry.get(args.dataset)
+            dataset = registry.get(args.name)
             if not dataset:
-                print(f"Dataset not found: {args.dataset}")
+                print(f"Dataset not found: {args.name}")
                 return
             
-            print(f"Adaptive Detection: {args.dataset} ({len(dataset)} prompts)")
+            print(f"Testing {len(dataset)} prompts with Adaptive detection...")
             
             correct = 0
             tier_counts = {1: 0, 2: 0, 3: 0}
@@ -109,35 +199,16 @@ def cmd_adaptive(args):
             print(f"  Tier 2 (Semantics): {tier_counts[2]:3d} ({stats['tier2_stop_rate']:.1%})")
             print(f"  Tier 3 (LLM):       {tier_counts[3]:3d} ({stats['tier3_stop_rate']:.1%})")
             print(f"{'='*60}")
-        else:
-            print("Error: Provide --prompt or --dataset")
-    
-    asyncio.run(run())
-
-
-# =============================================================================
-# Test Commands
-# =============================================================================
-
-def cmd_test(args):
-    """Run tests on a dataset."""
-    from creatine import ThreatDetector
-    from testing import TestHarness, print_progress
-    
-    registry = get_registry()
-    
-    if args.compare:
-        asyncio.run(run_comparison_test(args, registry))
+        
+        asyncio.run(run_adaptive())
         return
     
-    enable_llm = getattr(args, 'enable_llm', False)
-    enable_semantics = getattr(args, 'enable_semantics', False) or enable_llm
-    
+    # Full mode - use ThreatDetector with all tiers
     detector = ThreatDetector(
         verbose=args.verbose,
         include_feed_rules=not args.default_only,
-        enable_llm=enable_llm,
-        enable_semantics=enable_semantics,
+        enable_llm=True,
+        enable_semantics=True,
     )
     
     harness = TestHarness(detector, registry)
@@ -158,7 +229,7 @@ def cmd_test(args):
                 print(f"Dataset not found: {args.name}")
                 return
             
-            print(f"Testing {len(dataset)} prompts from '{args.name}'...")
+            print(f"Testing {len(dataset)} prompts from '{args.name}' with Full detection...")
             report = await harness.run_dataset(
                 dataset,
                 concurrency=args.concurrency,
@@ -175,8 +246,8 @@ def cmd_test(args):
 
 
 async def run_comparison_test(args, registry):
-    """Run tests with all evaluation modes and compare."""
-    from creatine import ThreatDetector
+    """Compare Adaptive vs Full detection modes."""
+    from creatine import ThreatDetector, AdaptiveDetector
     from testing import TestHarness, print_progress
     
     dataset = registry.get(args.name)
@@ -184,67 +255,52 @@ async def run_comparison_test(args, registry):
         print(f"Dataset not found: {args.name}")
         return
     
-    print(f"=== Evaluation Mode Comparison: {args.name} ({len(dataset)} prompts) ===\n")
+    print(f"=== Detection Mode Comparison: {args.name} ({len(dataset)} prompts) ===\n")
     
-    reports = {}
+    # Mode 1: Adaptive
+    print("[1/2] Running ADAPTIVE detection...")
+    adaptive = AdaptiveDetector(verbose=False)
+    adaptive_correct = 0
+    adaptive_time = 0
+    tier_counts = {1: 0, 2: 0, 3: 0}
     
-    # Mode 1: Keywords only
-    print("[1/4] Running with KEYWORDS only...")
-    detector = ThreatDetector(verbose=False, include_feed_rules=True)
+    for i, prompt in enumerate(dataset.prompts):
+        result = await adaptive.analyze(prompt.prompt)
+        if result.is_threat == prompt.is_malicious:
+            adaptive_correct += 1
+        tier_counts[result.tier_used.value] += 1
+        adaptive_time += result.total_time_ms
+        if (i + 1) % 10 == 0:
+            print(f"  Progress: {i+1}/{len(dataset)}", end="\r")
+    
+    adaptive_accuracy = adaptive_correct / len(dataset)
+    adaptive_stats = adaptive.get_stats()
+    
+    # Mode 2: Full
+    print("\n\n[2/2] Running FULL detection (all tiers)...")
+    detector = ThreatDetector(verbose=False, enable_semantics=True, enable_llm=True)
     harness = TestHarness(detector, registry)
-    reports['keywords'] = await harness.run_dataset(
+    full_report = await harness.run_dataset(
         dataset, concurrency=args.concurrency,
         progress_callback=print_progress if not args.quiet else None,
     )
     
-    # Mode 2: Keywords + Semantics
-    print("\n\n[2/4] Running with KEYWORDS + SEMANTICS...")
-    detector = ThreatDetector(verbose=False, include_feed_rules=True, enable_semantics=True)
-    harness = TestHarness(detector, registry)
-    reports['semantics'] = await harness.run_dataset(
-        dataset, concurrency=args.concurrency,
-        progress_callback=print_progress if not args.quiet else None,
-    )
-    
-    # Mode 3: Keywords + Semantics + LLM
-    print("\n\n[3/4] Running with KEYWORDS + SEMANTICS + LLM...")
-    detector = ThreatDetector(verbose=False, include_feed_rules=True, enable_semantics=True, enable_llm=True)
-    harness = TestHarness(detector, registry)
-    reports['llm'] = await harness.run_dataset(
-        dataset, concurrency=args.concurrency,
-        progress_callback=print_progress if not args.quiet else None,
-    )
-    
-    # Mode 4: Default rules only (baseline)
-    print("\n\n[4/4] Running with DEFAULT rules only (baseline)...")
-    detector = ThreatDetector(verbose=False, include_feed_rules=False)
-    harness = TestHarness(detector, registry)
-    reports['baseline'] = await harness.run_dataset(
-        dataset, concurrency=args.concurrency,
-        progress_callback=print_progress if not args.quiet else None,
-    )
-    
-    # Print comparison table
+    # Print comparison
     print("\n\n")
-    print("=" * 95)
-    print("                              EVALUATION MODE COMPARISON")
-    print("=" * 95)
-    print(f"{'Metric':<20} {'Baseline':>14} {'Keywords':>14} {'+ Semantics':>14} {'+ LLM':>14} {'Improvement':>12}")
-    print("-" * 95)
-    
-    r = reports
-    for name, attr in [("Accuracy", 'accuracy'), ("Precision", 'precision'), ("Recall", 'recall'), ("F1 Score", 'f1_score')]:
-        baseline = getattr(r['baseline'], attr)
-        kw = getattr(r['keywords'], attr)
-        sem = getattr(r['semantics'], attr)
-        llm = getattr(r['llm'], attr)
-        improvement = llm - baseline
-        arrow = "↑" if improvement > 0 else ("↓" if improvement < 0 else "→")
-        print(f"{name:<20} {baseline:>13.2%} {kw:>13.2%} {sem:>13.2%} {llm:>13.2%} {arrow} {improvement:>+10.2%}")
-    
-    print("-" * 95)
-    print(f"{'Avg Time (ms)':<20} {r['baseline'].avg_response_time_ms:>14.1f} {r['keywords'].avg_response_time_ms:>14.1f} {r['semantics'].avg_response_time_ms:>14.1f} {r['llm'].avg_response_time_ms:>14.1f}")
-    print("=" * 95)
+    print("=" * 70)
+    print("                    DETECTION MODE COMPARISON")
+    print("=" * 70)
+    print(f"{'Metric':<25} {'Adaptive':>20} {'Full':>20}")
+    print("-" * 70)
+    print(f"{'Accuracy':<25} {adaptive_accuracy:>19.1%} {full_report.accuracy:>19.1%}")
+    print(f"{'Total Time':<25} {adaptive_time:>17.0f}ms {full_report.total_test_time_ms:>17.0f}ms")
+    print(f"{'Avg Time/Prompt':<25} {adaptive_stats['avg_time_ms']:>17.1f}ms {full_report.avg_response_time_ms:>17.1f}ms")
+    print("-" * 70)
+    print(f"\nAdaptive Tier Distribution:")
+    print(f"  Tier 1 (Keywords):  {tier_counts[1]:3d} ({adaptive_stats['tier1_stop_rate']:.1%})")
+    print(f"  Tier 2 (Semantics): {tier_counts[2]:3d} ({adaptive_stats['tier2_stop_rate']:.1%})")
+    print(f"  Tier 3 (LLM):       {tier_counts[3]:3d} ({adaptive_stats['tier3_stop_rate']:.1%})")
+    print("=" * 70)
 
 
 # =============================================================================
@@ -451,61 +507,14 @@ def cmd_forensics(args):
     try:
         asyncio.run(run())
     except Exception as e:
-        print(f"Error: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-
-
-def cmd_pipeline(args):
-    """Run orchestrated multi-agent pipeline."""
-    from agents import (
-        create_detection_pipeline,
-        create_ensemble_detector,
-        create_tiered_router,
-        Pipeline,
-        AdaptiveDetectorAgent,
-        ForensicsAgentWrapper,
-    )
-    
-    async def run():
-        # Select pipeline type
-        if args.type == "detect":
-            executor = create_detection_pipeline(include_forensics=args.forensics)
-        elif args.type == "ensemble":
-            executor = create_ensemble_detector()
-        elif args.type == "tiered":
-            executor = create_tiered_router()
-        elif args.type == "full":
-            # Full pipeline: Adaptive → Forensics (if threat)
-            executor = create_detection_pipeline(include_forensics=True)
+        error_str = str(e)
+        if "content_filter" in error_str.lower() or "content management policy" in error_str.lower():
+            print(f"ℹ Forensics blocked by Azure Content Safety (attack content triggered filter)")
         else:
-            print(f"Unknown pipeline type: {args.type}")
-            return
-        
-        print(f"Running {args.type} pipeline...")
-        print(f"Prompt: {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
-        print()
-        
-        result = await executor.run(args.prompt)
-        
-        print(result.summary())
-        
-        if args.verbose and result.final_result:
-            import json
-            print(f"\nFinal Result:")
-            if isinstance(result.final_result, dict):
-                print(json.dumps(result.final_result, indent=2, default=str))
-            else:
-                print(result.final_result)
-    
-    try:
-        asyncio.run(run())
-    except Exception as e:
-        print(f"Error: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
+            print(f"Error: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
 
 
 # =============================================================================
@@ -516,35 +525,47 @@ def main():
     parser = argparse.ArgumentParser(
         description="Creatine - Prompt Security Detection",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  creatine detect "test prompt"              # Adaptive detection (default)
+  creatine detect "test prompt" --full       # Full detection (all tiers)
+  creatine detect-pipeline "test prompt"     # Detection + forensics pipeline
+  creatine detect-ensemble "test prompt"     # Parallel voting ensemble
+  creatine test common_jailbreaks            # Test against dataset
+  creatine forensics "suspicious prompt"     # Deep forensic analysis
+""",
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     
-    # analyze
-    p = subparsers.add_parser("analyze", help="Quick single-prompt analysis")
+    # detect (main command)
+    p = subparsers.add_parser("detect", help="Analyze a prompt for threats")
+    p.add_argument("prompt", help="Prompt to analyze")
+    p.add_argument("--full", action="store_true", dest="full_mode",
+                   help="Run all detection tiers (default: adaptive)")
+    p.add_argument("--confidence-threshold", type=float, 
+                   help="Confidence threshold for adaptive mode (default: 0.85)")
+    p.add_argument("-v", "--verbose", action="store_true")
+    
+    # detect-pipeline
+    p = subparsers.add_parser("detect-pipeline", help="Detection pipeline (detect → forensics)")
     p.add_argument("prompt", help="Prompt to analyze")
     p.add_argument("-v", "--verbose", action="store_true")
     
-    # adaptive
-    p = subparsers.add_parser("adaptive", help="Adaptive tiered detection")
-    p.add_argument("--prompt", help="Single prompt")
-    p.add_argument("--dataset", help="Dataset name")
-    p.add_argument("--confidence-threshold", type=float, default=0.85)
-    p.add_argument("--time-budget", type=float, default=10000)
-    p.add_argument("--force-full", action="store_true")
-    p.add_argument("-q", "--quiet", action="store_true")
+    # detect-ensemble
+    p = subparsers.add_parser("detect-ensemble", help="Ensemble detection (parallel voting)")
+    p.add_argument("prompt", help="Prompt to analyze")
     p.add_argument("-v", "--verbose", action="store_true")
     
     # test
     p = subparsers.add_parser("test", help="Run tests on a dataset")
     p.add_argument("name", help="Dataset name (or 'all')")
+    p.add_argument("--adaptive", action="store_true", help="Use adaptive detection")
     p.add_argument("-c", "--concurrency", type=int, default=5)
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-s", "--save", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--default-only", action="store_true")
-    p.add_argument("--compare", action="store_true", help="Compare all evaluation modes")
-    p.add_argument("--enable-llm", action="store_true")
-    p.add_argument("--enable-semantics", action="store_true")
+    p.add_argument("--compare", action="store_true", help="Compare Adaptive vs Full modes")
     
     # list
     subparsers.add_parser("list", help="List datasets")
@@ -596,23 +617,22 @@ def main():
     p.add_argument("--json", action="store_true", help="Output raw JSON analysis")
     p.add_argument("-v", "--verbose", action="store_true")
     
-    # pipeline
-    p = subparsers.add_parser("pipeline", help="Run multi-agent orchestrated pipeline")
-    p.add_argument("prompt", help="Prompt to analyze")
-    p.add_argument("-t", "--type", choices=["detect", "ensemble", "tiered", "full"], 
-                   default="full", help="Pipeline type")
-    p.add_argument("--forensics", action="store_true", help="Include forensics stage")
-    p.add_argument("-v", "--verbose", action="store_true")
-    
     args = parser.parse_args()
     
     if not args.command:
         parser.print_help()
         return
     
+    # Handle detect mode flag
+    if args.command == "detect":
+        args.mode = "full" if args.full_mode else "adaptive"
+    elif args.command == "test":
+        args.mode = "adaptive" if args.adaptive else "full"
+    
     commands = {
-        "analyze": cmd_analyze,
-        "adaptive": cmd_adaptive,
+        "detect": cmd_detect,
+        "detect-pipeline": cmd_detect_pipeline,
+        "detect-ensemble": cmd_detect_ensemble,
         "test": cmd_test,
         "list": cmd_list,
         "info": cmd_info,
@@ -622,7 +642,6 @@ def main():
         "generate-rules": cmd_generate_rules,
         "sync-feed": cmd_sync_feed,
         "forensics": cmd_forensics,
-        "pipeline": cmd_pipeline,
     }
     
     cmd_func = commands.get(args.command)

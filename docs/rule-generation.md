@@ -44,12 +44,12 @@ The agent tests rules against a dataset and improves them:
 3. **Improve**: Send error samples to AI for rule refinement
 4. **Repeat**: Continue until targets met or max iterations reached
 
-## Usage Examples
+## Usage
 
 ### Basic Rule Generation
 
 ```bash
-python3 test_cli.py generate-rules --test-dataset common_jailbreaks -v
+python creatine.py generate-rules --test-dataset common_jailbreaks -v
 ```
 
 This will:
@@ -62,10 +62,9 @@ This will:
 ### Adding Multiple Data Sources
 
 ```bash
-python3 test_cli.py generate-rules \
+python creatine.py generate-rules \
   --test-dataset common_jailbreaks \
   --add-huggingface deepset/prompt-injections \
-  --add-file custom_threats.txt \
   -v
 ```
 
@@ -73,14 +72,14 @@ python3 test_cli.py generate-rules \
 
 ```bash
 # High precision (fewer false positives)
-python3 test_cli.py generate-rules \
+python creatine.py generate-rules \
   --test-dataset common_jailbreaks \
   --target-precision 0.98 \
   --target-recall 0.80 \
   -v
 
 # High recall (catch more attacks)
-python3 test_cli.py generate-rules \
+python creatine.py generate-rules \
   --test-dataset common_jailbreaks \
   --target-precision 0.85 \
   --target-recall 0.95 \
@@ -133,7 +132,7 @@ Iteration 3: Precision=0.92, Recall=0.93, F1=0.92
 ```bash
 # Required for AI rule generation
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
 
 # Required for PromptIntel data source
 PROMPTINTEL_API_KEY=your-api-key
@@ -141,9 +140,9 @@ PROMPTINTEL_API_KEY=your-api-key
 
 ### Agent Parameters
 
-In `rule_agent.py`, you can configure:
-
 ```python
+from agents import RuleGenerationAgent
+
 agent = RuleGenerationAgent(
     target_precision=0.9,   # Minimum acceptable precision
     target_recall=0.9,      # Minimum acceptable recall
@@ -155,27 +154,26 @@ agent = RuleGenerationAgent(
 ## Programmatic Usage
 
 ```python
-from rule_agent import RuleGenerationAgent, DataSource
+from agents import RuleGenerationAgent
 
 # Create agent
-agent = RuleGenerationAgent(
-    target_precision=0.9,
-    target_recall=0.9,
-    max_iterations=5,
-    verbose=True
-)
+agent = RuleGenerationAgent(verbose=True)
 
 # Add data sources
-agent.add_data_source(DataSource.promptintel())
-agent.add_data_source(DataSource.huggingface("deepset/prompt-injections"))
-agent.add_data_source(DataSource.file("threats.txt"))
+agent.add_promptintel_source()
+agent.add_huggingface_source("deepset/prompt-injections")
 
 # Run optimization
-result = await agent.run(test_dataset="common_jailbreaks")
+result = await agent.run(
+    test_dataset="common_jailbreaks",
+    output_file="my_rules.nov",
+    target_precision=0.9,
+    target_recall=0.9,
+)
 
 # Access results
-print(f"Final F1: {result.f1_score:.2%}")
-print(f"Rules saved to: {result.output_file}")
+print(f"Final F1: {result.final_metrics['f1']:.2%}")
+print(f"Rules saved to: rules/{result.output_file}")
 ```
 
 ## Tips for Best Results

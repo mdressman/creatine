@@ -461,6 +461,7 @@ class Orchestrator:
         executor: Union[BaseAgent, Pipeline, ParallelExecutor, ConditionalRouter],
         condition: Optional[Callable[[Dict], bool]] = None,
         transform_input: Optional[Callable[[Any, Dict], Any]] = None,
+        critical: bool = True,
     ):
         """
         Add a stage to the orchestration.
@@ -470,12 +471,14 @@ class Orchestrator:
             executor: Agent or executor to run
             condition: Optional condition to check before running (receives context)
             transform_input: Optional function to transform input (receives input and context)
+            critical: If True (default), stage failure fails the pipeline. If False, continue on failure.
         """
         self.stages.append({
             "name": name,
             "executor": executor,
             "condition": condition,
             "transform_input": transform_input,
+            "critical": critical,
         })
         return self  # Allow chaining
     
@@ -493,6 +496,7 @@ class Orchestrator:
             executor = stage["executor"]
             condition = stage["condition"]
             transform = stage["transform_input"]
+            critical = stage.get("critical", True)
             
             # Check condition
             if condition and not condition(context):
@@ -523,23 +527,42 @@ class Orchestrator:
             context[f"{stage_name}_result"] = result.result
             
             if not result.success:
-                return OrchestrationResult(
-                    success=False,
-                    final_result=None,
-                    agent_results=all_results,
-                    total_time_ms=(time.perf_counter() - start) * 1000,
-                    execution_path=execution_path,
-                    metadata={"failed_at": stage_name},
-                )
+                if critical:
+                    return OrchestrationResult(
+                        success=False,
+                        final_result=None,
+                        agent_results=all_results,
+                        total_time_ms=(time.perf_counter() - start) * 1000,
+                        execution_path=execution_path,
+                        metadata={"failed_at": stage_name},
+                    )
+                else:
+                    # Non-critical stage failed - continue with previous data
+                    context[f"{stage_name}_error"] = result.error
+                    continue
             
             current_data = result.result
         
+        # Find last successful result
+        last_success = None
+        for r in reversed(all_results):
+            if r.success:
+                last_success = r.result
+                break
+        
+        # Collect any non-critical stage errors for metadata
+        stage_errors = {k.replace("_error", ""): v for k, v in context.items() if k.endswith("_error")}
+        metadata = {}
+        if stage_errors:
+            metadata["stage_errors"] = stage_errors
+        
         return OrchestrationResult(
             success=True,
-            final_result=all_results[-1].result if all_results else None,
+            final_result=last_success,
             agent_results=all_results,
             total_time_ms=(time.perf_counter() - start) * 1000,
             execution_path=execution_path,
+            metadata=metadata if metadata else None,
         )
 
 
@@ -551,7 +574,7 @@ def create_detection_pipeline(include_forensics: bool = True) -> Orchestrator:
     """
     Create a standard detection pipeline:
     1. Adaptive detection
-    2. Forensics (if threat detected)
+    2. Forensics (if threat detected) - non-critical, may fail with content filters
     """
     orchestrator = Orchestrator("DetectionPipeline")
     
@@ -563,6 +586,7 @@ def create_detection_pipeline(include_forensics: bool = True) -> Orchestrator:
             ForensicsAgentWrapper(),
             condition=lambda ctx: ctx.get("detect_result", {}).get("is_threat", False),
             transform_input=lambda data, ctx: ctx.get("original_input"),
+            critical=False,  # Forensics may fail due to content filters - don't fail pipeline
         )
     
     return orchestrator
