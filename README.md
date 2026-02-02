@@ -64,6 +64,29 @@ python creatine.py import-hf deepset/prompt-injections
 python creatine.py generate-rules --test-dataset common_jailbreaks
 ```
 
+## Demo
+
+Run the interactive demo to see Creatine in action:
+
+```bash
+# Quick 2-minute demo
+python demo/interactive_demo.py --quick
+
+# Full interactive demo (15-20 min)
+python demo/interactive_demo.py --full
+
+# CLI walkthrough
+./demo/run_demo.sh
+```
+
+The demo covers:
+- Multi-tier detection (Keywords → Semantics → LLM)
+- Adaptive cost-optimized escalation
+- Multi-agent orchestration (pipelines, ensembles)
+- Forensics analysis with attack technique breakdown
+
+See `demo/sample_prompts.md` for curated attack examples.
+
 ## Evaluation Modes
 
 | Mode | Speed | Accuracy | Cost | Use Case |
@@ -89,9 +112,15 @@ creatine/
 │   ├── dataset.py           # Dataset management
 │   └── harness.py           # Test runner with metrics
 ├── agents/                  # AI agents
-│   └── rule_generator.py    # Rule generation agent
+│   ├── rule_generator.py    # Rule generation agent
+│   ├── forensics.py         # Attack forensics analysis
+│   └── orchestrator.py      # Multi-agent orchestration
 ├── cli/                     # CLI implementation
 │   └── main.py              # Command handlers
+├── demo/                    # Demo materials
+│   ├── interactive_demo.py  # Interactive Python demo
+│   ├── run_demo.sh          # CLI walkthrough script
+│   └── sample_prompts.md    # Curated attack examples
 ├── datasets/                # Test datasets (JSON)
 ├── reports/                 # Generated test reports
 └── docs/                    # Documentation
