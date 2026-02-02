@@ -265,37 +265,101 @@ class AdaptiveDetector:
         import codecs
         return codecs.decode(text, 'rot_13')
     
+    def _is_meaningful_english(self, text: str, threshold: float = 0.4) -> bool:
+        """
+        Check if text appears to be meaningful English (vs gibberish).
+        
+        Uses a simple heuristic: what percentage of words are common English words?
+        If above threshold, it's likely intentionally encoded meaningful text.
+        """
+        # Common English words (~500 most frequent + security-relevant terms)
+        common_words = {
+            # Top 100 most common
+            'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
+            'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+            'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
+            'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what',
+            'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me',
+            'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know', 'take',
+            'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other',
+            'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also',
+            'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way',
+            'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us',
+            # Common verbs
+            'is', 'are', 'was', 'were', 'been', 'has', 'had', 'did', 'does',
+            'tell', 'ask', 'show', 'try', 'leave', 'call', 'keep', 'let', 'begin', 'seem',
+            'help', 'talk', 'turn', 'start', 'might', 'should', 'need', 'feel', 'must',
+            'put', 'run', 'move', 'live', 'believe', 'hold', 'bring', 'happen', 'write', 'read',
+            'provide', 'sit', 'stand', 'lose', 'pay', 'meet', 'include', 'continue', 'set', 'learn',
+            'change', 'lead', 'understand', 'watch', 'follow', 'stop', 'create', 'speak', 'allow', 'add',
+            'spend', 'grow', 'open', 'walk', 'win', 'offer', 'remember', 'love', 'consider', 'appear',
+            'buy', 'wait', 'serve', 'die', 'send', 'expect', 'build', 'stay', 'fall', 'cut',
+            'reach', 'kill', 'remain', 'suggest', 'raise', 'pass', 'sell', 'require', 'report', 'decide',
+            # Common adjectives
+            'good', 'new', 'first', 'last', 'long', 'great', 'little', 'own', 'other', 'old',
+            'right', 'big', 'high', 'different', 'small', 'large', 'next', 'early', 'young', 'important',
+            'few', 'public', 'bad', 'same', 'able', 'quick', 'brown', 'lazy', 'fast', 'slow',
+            # Common nouns
+            'man', 'woman', 'child', 'world', 'life', 'hand', 'part', 'place', 'case', 'week',
+            'company', 'system', 'program', 'question', 'government', 'number', 'night', 'point', 'home', 'water',
+            'room', 'mother', 'area', 'money', 'story', 'fact', 'month', 'lot', 'study', 'book',
+            'eye', 'job', 'word', 'business', 'issue', 'side', 'kind', 'head', 'house', 'service',
+            'friend', 'father', 'power', 'hour', 'game', 'line', 'end', 'member', 'law', 'car',
+            'city', 'community', 'name', 'president', 'team', 'minute', 'idea', 'kid', 'body', 'information',
+            'dog', 'cat', 'fox', 'bird', 'fish', 'tree', 'flower', 'poem', 'song', 'color',
+            # Common adverbs/prepositions
+            'each', 'find', 'down', 'still', 'here', 'why', 'where', 'while', 'through', 'very',
+            'much', 'before', 'too', 'mean', 'never', 'always', 'every', 'under', 'again', 'however',
+            # Security/tech relevant
+            'please', 'system', 'prompt', 'ignore', 'previous', 'instructions', 'forget', 'pretend', 'act', 'role',
+            'secret', 'password', 'code', 'message', 'decode', 'encrypt', 'hidden', 'bypass', 'override', 'admin',
+            'user', 'data', 'file', 'access', 'command', 'execute', 'reveal', 'show', 'tell', 'give',
+            'hack', 'bomb', 'weapon', 'attack', 'exploit', 'inject', 'script', 'output', 'input', 'text',
+        }
+        
+        # Extract words (letters only)
+        words = re.findall(r'[a-zA-Z]+', text.lower())
+        
+        if len(words) < 3:
+            return False  # Too short to judge
+        
+        # Count how many are common English words
+        common_count = sum(1 for w in words if w in common_words)
+        ratio = common_count / len(words)
+        
+        return ratio >= threshold
+    
     def _try_decode_rot13(self, text: str) -> Optional[str]:
         """
         Try to decode ROT13 if the text looks like it might be encoded.
         
-        ROT13 is tricky because any text is valid ROT13. We use heuristics:
-        - Text explicitly mentions ROT13
-        - Decoded version contains more common attack keywords
+        If text mentions ROT13/cipher/decode, extract and decode portions.
+        Flag as suspicious if decoded text is meaningful English - the act
+        of obfuscating ANY message to an LLM is itself suspicious.
         """
         text_lower = text.lower()
         
-        # If explicitly mentioned, decode the whole thing or extract quoted parts
-        if 'rot13' in text_lower or 'rot-13' in text_lower:
-            # Try to find quoted/encoded portions
-            import re
-            # Match quoted strings or strings after colons
-            patterns = [
-                r"['\"]([^'\"]+)['\"]",  # Quoted strings
-                r":\s*['\"]?([a-zA-Z\s]+)['\"]?",  # After colon
-            ]
-            for pattern in patterns:
-                matches = re.findall(pattern, text)
-                for match in matches:
-                    if len(match) > 5:  # Reasonable length
-                        decoded = self._decode_rot13(match)
-                        # Check if decoded has attack keywords
-                        attack_words = ['bomb', 'hack', 'kill', 'steal', 'ignore', 'bypass', 'password', 'secret']
-                        if any(word in decoded.lower() for word in attack_words):
-                            return decoded
-            
-            # Fall back to decoding the whole text
-            return self._decode_rot13(text)
+        # Trigger words that suggest intentional encoding
+        encoding_hints = ['rot13', 'rot-13', 'rot 13', 'cipher', 'decode', 'encoded', 'decrypt']
+        
+        if not any(hint in text_lower for hint in encoding_hints):
+            return None
+        
+        # Try to find quoted/encoded portions
+        patterns = [
+            r"['\"]([^'\"]{5,})['\"]",  # Quoted strings (min 5 chars)
+            r":\s*['\"]?([a-zA-Z][a-zA-Z\s]{4,})['\"]?",  # After colon
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                decoded = self._decode_rot13(match)
+                # If decoded is meaningful English, it was intentionally obfuscated
+                if self._is_meaningful_english(decoded, threshold=0.4):
+                    if self.verbose:
+                        print(f"  ROT13 decoded to meaningful text: '{decoded[:50]}...'")
+                    return decoded
         
         return None
     
