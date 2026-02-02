@@ -1,5 +1,10 @@
 """Core threat detector using Nova pattern matching."""
 
+import os
+import sys
+import io
+import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, List
 
@@ -14,6 +19,24 @@ RULES_DIR = Path(__file__).parent / "rules"
 DEFAULT_RULES_PATH = RULES_DIR / "default.nov"
 ADVANCED_RULES_PATH = RULES_DIR / "advanced.nov"
 FEED_RULES_PATH = RULES_DIR / "feed_generated.nov"
+
+
+@contextmanager
+def suppress_output():
+    """Temporarily suppress stdout, stderr, and warnings."""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # Also suppress HuggingFace tokenizers warning
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
 
 class ThreatDetector:
@@ -35,6 +58,7 @@ class ThreatDetector:
         include_feed_rules: bool = True,
         enable_llm: bool = False,
         enable_semantics: bool = False,
+        quiet: bool = False,
     ):
         """
         Initialize the detector.
@@ -45,8 +69,10 @@ class ThreatDetector:
             include_feed_rules: Whether to also load feed-generated rules
             enable_llm: Enable LLM-based rule evaluation (requires Azure OpenAI)
             enable_semantics: Enable semantic similarity matching
+            quiet: Suppress initialization messages (still shows analysis output if verbose)
         """
         self.verbose = verbose
+        self.quiet = quiet
         self._matchers: List[NovaMatcher] = []
         self._rules_loaded: List[str] = []
         self._enable_llm = enable_llm
@@ -59,19 +85,19 @@ class ThreatDetector:
         if enable_llm:
             try:
                 self._llm_evaluator = AzureEntraLLMEvaluator()
-                if verbose:
+                if verbose and not quiet:
                     print("LLM evaluator initialized (Azure OpenAI with Entra auth)")
             except Exception as e:
-                if verbose:
+                if verbose and not quiet:
                     print(f"Warning: Failed to initialize LLM evaluator: {e}")
         
         if enable_semantics:
             try:
                 self._semantic_evaluator = create_semantic_evaluator()
-                if verbose:
+                if verbose and not quiet:
                     print("Semantic evaluator initialized")
             except Exception as e:
-                if verbose:
+                if verbose and not quiet:
                     print(f"Warning: Failed to initialize semantic evaluator: {e}")
         
         # Load default rules
@@ -79,19 +105,19 @@ class ThreatDetector:
         if rules_file.exists():
             self.load_rules_file(rules_file)
             self._rules_loaded.append(str(rules_file))
-        elif verbose:
+        elif verbose and not quiet:
             print(f"Warning: Rules file not found: {rules_file}")
         
         # Also load feed-generated rules if requested and they exist
         if include_feed_rules and FEED_RULES_PATH.exists() and FEED_RULES_PATH != rules_file:
-            if verbose:
+            if verbose and not quiet:
                 print(f"Loading feed rules from: {FEED_RULES_PATH}")
             self.load_rules_file(FEED_RULES_PATH)
             self._rules_loaded.append(str(FEED_RULES_PATH))
         
         # Load advanced rules if semantic/LLM evaluation is enabled
         if (enable_llm or enable_semantics) and ADVANCED_RULES_PATH.exists():
-            if verbose:
+            if verbose and not quiet:
                 print(f"Loading advanced rules from: {ADVANCED_RULES_PATH}")
             self.load_rules_file(ADVANCED_RULES_PATH)
             self._rules_loaded.append(str(ADVANCED_RULES_PATH))
@@ -182,12 +208,14 @@ class ThreatDetector:
             if rule_block.strip():
                 try:
                     parsed = parser.parse(rule_block)
-                    matcher = NovaMatcher(
-                        parsed,
-                        llm_evaluator=self._llm_evaluator,
-                        semantic_evaluator=self._semantic_evaluator,
-                        create_llm_evaluator=False,
-                    )
+                    # Suppress Nova's noisy output during matcher creation
+                    with suppress_output():
+                        matcher = NovaMatcher(
+                            parsed,
+                            llm_evaluator=self._llm_evaluator,
+                            semantic_evaluator=self._semantic_evaluator,
+                            create_llm_evaluator=False,
+                        )
                     self._matchers.append(matcher)
                 except Exception as e:
                     if self.verbose:

@@ -148,8 +148,35 @@ class AzureEntraLLMEvaluator(LLMEvaluator):
 
 
 def create_semantic_evaluator() -> DefaultSemanticEvaluator:
-    """Create a semantic similarity evaluator."""
-    return DefaultSemanticEvaluator()
+    """Create a semantic similarity evaluator with suppressed noisy output."""
+    import sys
+    import io
+    import logging
+    import os
+    import warnings
+    
+    # Suppress transformers/sentence-transformers logging
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    
+    # Suppress HF Hub warnings
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+    warnings.filterwarnings("ignore", message=".*HF Hub.*")
+    
+    # Suppress stdout/stderr during model loading (BERT load report, HF warnings)
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        evaluator = DefaultSemanticEvaluator()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+    
+    return evaluator
 
 
 def create_llm_evaluator(

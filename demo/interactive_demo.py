@@ -5,9 +5,25 @@ Creatine Interactive Demo
 A guided demonstration of prompt security detection capabilities.
 """
 
-import asyncio
-import sys
+# Suppress noisy warnings/output FIRST before any imports
 import os
+import sys
+import warnings
+import logging
+
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+warnings.filterwarnings("ignore", message=".*HF Hub.*")
+logging.getLogger("urllib3").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+
+# Now do other imports
+import asyncio
 import time
 from typing import List, Tuple
 

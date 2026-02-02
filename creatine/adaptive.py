@@ -72,6 +72,7 @@ class AdaptiveDetector:
                 include_feed_rules=False,
                 enable_llm=False,
                 enable_semantics=False,
+                quiet=True,  # Suppress init messages, AdaptiveDetector handles output
             )
         return self._tier1_client
     
@@ -83,6 +84,7 @@ class AdaptiveDetector:
                 include_feed_rules=False,
                 enable_llm=False,
                 enable_semantics=True,
+                quiet=True,
             )
         return self._tier2_client
     
@@ -94,6 +96,7 @@ class AdaptiveDetector:
                 include_feed_rules=False,
                 enable_llm=True,
                 enable_semantics=True,
+                quiet=True,
             )
         return self._tier3_client
     
