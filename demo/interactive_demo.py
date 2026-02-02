@@ -266,16 +266,23 @@ Creatine supports sophisticated orchestration patterns:
     elapsed = time.time() - start
     
     print(f"\n  {Colors.BOLD}Detection Result:{Colors.END}")
-    print_result(result.get("is_threat", False))
+    # Access the final_result from OrchestrationResult
+    final = result.final_result if hasattr(result, 'final_result') else result
+    is_threat = final.get("is_threat", False) if isinstance(final, dict) else getattr(final, 'is_threat', False)
+    print_result(is_threat)
     
-    if "forensics" in result:
-        forensics = result["forensics"]
+    forensics = final.get("forensics") if isinstance(final, dict) else getattr(final, 'forensics', None)
+    if forensics:
         print(f"\n  {Colors.BOLD}Forensics Analysis:{Colors.END}")
-        print(f"  Severity: {forensics.get('severity', 'unknown')}")
-        if forensics.get('techniques'):
+        sev = forensics.get('severity', 'unknown') if isinstance(forensics, dict) else getattr(forensics, 'severity', 'unknown')
+        print(f"  Severity: {sev}")
+        techs = forensics.get('techniques') if isinstance(forensics, dict) else getattr(forensics, 'techniques', [])
+        if techs:
             print(f"  Techniques detected:")
-            for tech in forensics['techniques'][:3]:
-                print(f"    • {tech.get('name', 'Unknown')}: {tech.get('description', '')[:50]}...")
+            for tech in techs[:3]:
+                name = tech.get('name', 'Unknown') if isinstance(tech, dict) else getattr(tech, 'name', 'Unknown')
+                desc = tech.get('description', '') if isinstance(tech, dict) else getattr(tech, 'description', '')
+                print(f"    • {name}: {desc[:50]}...")
     
     print(f"\n  Total time: {elapsed:.2f}s")
     
@@ -298,8 +305,11 @@ Creatine supports sophisticated orchestration patterns:
         result = await ensemble.run(test_prompt)
         elapsed = time.time() - start
         
-        print(f"\n  Votes: {result.get('votes', {})}")
-        print(f"  Consensus: {'THREAT' if result.get('is_threat') else 'SAFE'}")
+        final = result.final_result if hasattr(result, 'final_result') else result
+        votes = final.get('votes', {}) if isinstance(final, dict) else {}
+        is_threat = final.get('is_threat', False) if isinstance(final, dict) else False
+        print(f"\n  Votes: {votes}")
+        print(f"  Consensus: {'THREAT' if is_threat else 'SAFE'}")
         print(f"  Time: {elapsed:.2f}s (parallel execution)")
     except Exception as e:
         print(f"  {Colors.YELLOW}Note: Ensemble requires all detection modes configured{Colors.END}")
