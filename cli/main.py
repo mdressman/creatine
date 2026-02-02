@@ -457,6 +457,57 @@ def cmd_forensics(args):
             traceback.print_exc()
 
 
+def cmd_pipeline(args):
+    """Run orchestrated multi-agent pipeline."""
+    from agents import (
+        create_detection_pipeline,
+        create_ensemble_detector,
+        create_tiered_router,
+        Pipeline,
+        AdaptiveDetectorAgent,
+        ForensicsAgentWrapper,
+    )
+    
+    async def run():
+        # Select pipeline type
+        if args.type == "detect":
+            executor = create_detection_pipeline(include_forensics=args.forensics)
+        elif args.type == "ensemble":
+            executor = create_ensemble_detector()
+        elif args.type == "tiered":
+            executor = create_tiered_router()
+        elif args.type == "full":
+            # Full pipeline: Adaptive → Forensics (if threat)
+            executor = create_detection_pipeline(include_forensics=True)
+        else:
+            print(f"Unknown pipeline type: {args.type}")
+            return
+        
+        print(f"Running {args.type} pipeline...")
+        print(f"Prompt: {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
+        print()
+        
+        result = await executor.run(args.prompt)
+        
+        print(result.summary())
+        
+        if args.verbose and result.final_result:
+            import json
+            print(f"\nFinal Result:")
+            if isinstance(result.final_result, dict):
+                print(json.dumps(result.final_result, indent=2, default=str))
+            else:
+                print(result.final_result)
+    
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -545,6 +596,14 @@ def main():
     p.add_argument("--json", action="store_true", help="Output raw JSON analysis")
     p.add_argument("-v", "--verbose", action="store_true")
     
+    # pipeline
+    p = subparsers.add_parser("pipeline", help="Run multi-agent orchestrated pipeline")
+    p.add_argument("prompt", help="Prompt to analyze")
+    p.add_argument("-t", "--type", choices=["detect", "ensemble", "tiered", "full"], 
+                   default="full", help="Pipeline type")
+    p.add_argument("--forensics", action="store_true", help="Include forensics stage")
+    p.add_argument("-v", "--verbose", action="store_true")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -563,6 +622,7 @@ def main():
         "generate-rules": cmd_generate_rules,
         "sync-feed": cmd_sync_feed,
         "forensics": cmd_forensics,
+        "pipeline": cmd_pipeline,
     }
     
     cmd_func = commands.get(args.command)
