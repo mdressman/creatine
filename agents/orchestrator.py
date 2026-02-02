@@ -592,20 +592,132 @@ def create_detection_pipeline(include_forensics: bool = True) -> Orchestrator:
     return orchestrator
 
 
-def create_ensemble_detector() -> ParallelExecutor:
+def create_ensemble_detector(
+    llm_endpoints: Optional[List[Dict[str, str]]] = None,
+) -> ParallelExecutor:
     """
-    Create an ensemble detector that runs multiple detection methods
-    and uses majority voting.
+    Create an ensemble detector that runs multiple LLM models in parallel
+    and uses majority voting for higher confidence results.
+    
+    Args:
+        llm_endpoints: List of LLM endpoint configs, each with:
+            - endpoint: Azure OpenAI endpoint URL
+            - deployment_name: Model deployment name
+            If not provided, reads from environment variables:
+            - AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT_NAME
+            - AZURE_OPENAI_ENDPOINT_2, AZURE_OPENAI_DEPLOYMENT_NAME_2
+            - AZURE_OPENAI_ENDPOINT_3, AZURE_OPENAI_DEPLOYMENT_NAME_3
+    
+    Returns:
+        ParallelExecutor with majority voting aggregation
+    
+    Example:
+        # Use environment variables (recommended)
+        ensemble = create_ensemble_detector()
+        
+        # Or specify endpoints explicitly
+        ensemble = create_ensemble_detector(llm_endpoints=[
+            {"endpoint": "https://resource1.openai.azure.com/", "deployment_name": "gpt-4"},
+            {"endpoint": "https://resource2.openai.azure.com/", "deployment_name": "gpt-4-turbo"},
+            {"endpoint": "https://resource3.openai.azure.com/", "deployment_name": "gpt-35-turbo"},
+        ])
     """
+    import os
+    
+    # Collect LLM endpoints from config or environment
+    endpoints = llm_endpoints or []
+    
+    if not endpoints:
+        # Try to load from environment variables
+        for suffix in ["", "_2", "_3"]:
+            endpoint = os.getenv(f"AZURE_OPENAI_ENDPOINT{suffix}")
+            deployment = os.getenv(f"AZURE_OPENAI_DEPLOYMENT_NAME{suffix}")
+            if endpoint and deployment:
+                endpoints.append({
+                    "endpoint": endpoint,
+                    "deployment_name": deployment,
+                })
+    
+    if len(endpoints) < 2:
+        # Fall back to single model with keywords+semantics diversity
+        print("Warning: Ensemble mode works best with 2+ LLM endpoints configured.")
+        print("Set AZURE_OPENAI_ENDPOINT_2 and AZURE_OPENAI_DEPLOYMENT_NAME_2 for better results.")
+        
+        # Use what we have: single LLM + semantics as fallback
+        agents = [
+            LLMDetectorAgent(
+                endpoint=endpoints[0]["endpoint"] if endpoints else None,
+                deployment_name=endpoints[0]["deployment_name"] if endpoints else None,
+                name="LLM_Primary",
+            ),
+        ]
+    else:
+        # Create one agent per LLM endpoint
+        agents = []
+        for i, ep in enumerate(endpoints):
+            agents.append(
+                LLMDetectorAgent(
+                    endpoint=ep["endpoint"],
+                    deployment_name=ep["deployment_name"],
+                    name=f"LLM_{ep['deployment_name']}",
+                )
+            )
+    
     return ParallelExecutor(
-        agents=[
-            DetectorAgent(enable_semantics=False, enable_llm=False),  # Keywords only
-            DetectorAgent(enable_semantics=True, enable_llm=False),   # + Semantics
-            DetectorAgent(enable_semantics=True, enable_llm=True),    # + LLM
-        ],
+        agents=agents,
         aggregation=AggregationStrategy.MAJORITY_VOTE,
         name="EnsembleDetector",
     )
+
+
+class LLMDetectorAgent(BaseAgent):
+    """
+    Agent that uses a specific LLM endpoint for detection.
+    Used in ensemble mode to get votes from different models.
+    """
+    
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        deployment_name: Optional[str] = None,
+        name: str = "LLMDetector",
+    ):
+        self.endpoint = endpoint
+        self.deployment_name = deployment_name
+        self.name = name
+        self._detector = None
+    
+    def _get_detector(self):
+        if self._detector is None:
+            from creatine import ThreatDetector
+            from creatine.evaluators import AzureEntraLLMEvaluator
+            
+            # Create detector with this specific LLM endpoint
+            self._detector = ThreatDetector(
+                enable_semantics=True,
+                enable_llm=True,
+                verbose=False,
+            )
+            
+            # Override the LLM evaluator with our specific endpoint
+            if self.endpoint and self.deployment_name:
+                self._detector.llm_evaluator = AzureEntraLLMEvaluator(
+                    endpoint=self.endpoint,
+                    deployment_name=self.deployment_name,
+                )
+        
+        return self._detector
+    
+    async def execute(self, input_data: Any, context: Dict[str, Any] = None) -> Any:
+        detector = self._get_detector()
+        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", str(input_data))
+        result = await detector.analyze(prompt)
+        return {
+            "is_threat": result.is_threat,
+            "confidence": result.confidence,
+            "risk_score": result.risk_score,
+            "model": self.deployment_name or "default",
+        }
 
 
 def create_tiered_router() -> ConditionalRouter:

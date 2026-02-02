@@ -104,13 +104,15 @@ def cmd_detect_pipeline(args):
 
 
 def cmd_detect_ensemble(args):
-    """Run ensemble detection (parallel voting across modes)."""
+    """Run ensemble detection (parallel voting across multiple LLM models)."""
     from agents import create_ensemble_detector
     
     async def run():
         ensemble = create_ensemble_detector()
         
-        print(f"Running ensemble detection (parallel voting)...")
+        model_names = [a.name for a in ensemble.agents]
+        print(f"Running ensemble detection with {len(model_names)} model(s)...")
+        print(f"Models: {', '.join(model_names)}")
         print(f"Prompt: {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
         print()
         
@@ -120,13 +122,13 @@ def cmd_detect_ensemble(args):
         if final:
             is_threat = final.get("is_threat", False) if isinstance(final, dict) else False
             votes = final.get("votes", {}) if isinstance(final, dict) else {}
+            confidence = final.get("confidence", 0) if isinstance(final, dict) else 0
             status = "🚨 THREAT" if is_threat else "✅ SAFE"
             print(f"{status}")
             if votes:
-                print(f"Votes: {votes}")
+                print(f"Votes: {votes} ({confidence:.0%} consensus)")
         
-        print(f"\nAgents: {', '.join(result.execution_path)}")
-        print(f"Total time: {result.total_time_ms:.0f}ms (parallel)")
+        print(f"\nTotal time: {result.total_time_ms:.0f}ms (parallel execution)")
     
     try:
         asyncio.run(run())
