@@ -68,7 +68,30 @@ python creatine.py import-hf deepset/prompt-injections
 
 # Generate optimized rules with AI
 python creatine.py generate-rules --test-dataset common_jailbreaks
+
+# Learn from accumulated detection logs
+python creatine.py learn logs/detections_*.jsonl -v
 ```
+
+## Automatic Learning Pipeline
+
+Creatine automatically logs all detections for continuous improvement:
+
+```bash
+# Detections are logged automatically to logs/detections_YYYY-MM-DD.jsonl
+python creatine.py detect "some prompt"  # Logged by default
+
+# Periodically learn from accumulated data
+python creatine.py learn logs/detections_*.jsonl -v
+
+# Output: New rules generated and saved to creatine/rules/
+```
+
+The learning pipeline:
+1. Identifies gaps where LLM caught attacks that keywords missed
+2. Clusters similar attack patterns using embeddings
+3. Extracts keywords and generates new detection rules
+4. Optionally validates against labeled datasets
 
 ## Demo
 
@@ -130,20 +153,23 @@ creatine/
 ├── creatine.py              # CLI entry point
 ├── creatine/                # Core detection package
 │   ├── detector.py          # ThreatDetector (Nova pattern matching)
-│   ├── adaptive.py          # AdaptiveDetector (tiered detection)
+│   ├── adaptive.py          # AdaptiveDetector (tiered detection + logging)
 │   ├── evaluators.py        # LLM and semantic evaluators
 │   ├── models.py            # Data classes
 │   ├── feed.py              # PromptIntel feed client
-│   └── rules/               # Nova rule files
-├── testing/                 # Testing framework
-│   ├── dataset.py           # Dataset management
-│   └── harness.py           # Test runner with metrics
+│   └── rules/               # Nova rule files (.nov)
 ├── agents/                  # AI agents
 │   ├── rule_generator.py    # Rule generation agent
 │   ├── forensics.py         # Attack forensics analysis
+│   ├── learning.py          # Adaptive learning pipeline
 │   └── orchestrator.py      # Multi-agent orchestration
+├── testing/                 # Testing framework
+│   ├── dataset.py           # Dataset management
+│   └── harness.py           # Test runner with metrics
 ├── cli/                     # CLI implementation
 │   └── main.py              # Command handlers
+├── logs/                    # Detection logs (auto-generated)
+│   └── detections_*.jsonl   # Daily log files for learning
 ├── notebooks/               # Jupyter notebooks
 │   └── kusto_analysis.ipynb # Kusto integration example
 ├── demo/                    # Demo materials

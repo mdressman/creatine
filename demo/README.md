@@ -38,9 +38,10 @@ python demo/interactive_demo.py --section 3  # Multi-agent orchestration
 
 1. **Defense in Depth**: Catches attacks that bypass simple filters
 2. **Cost Efficient**: Adaptive escalation saves ~85% on LLM costs
-3. **Explainable**: Forensics tells you WHY something was flagged
-4. **Extensible**: Add custom rules, agents, and detection patterns
-5. **Production Ready**: Clean API, CLI, and batch processing
+3. **Self-Improving**: Auto-learns from production logs to generate new rules
+4. **Explainable**: Forensics tells you WHY something was flagged
+5. **Extensible**: Add custom rules, agents, and detection patterns
+6. **Production Ready**: Clean API, CLI, and batch processing
 
 ## Sample Attack Categories Detected
 
@@ -56,7 +57,7 @@ python demo/interactive_demo.py --section 3  # Multi-agent orchestration
 ## CLI Quick Reference
 
 ```bash
-# Detection
+# Detection (logs automatically to logs/)
 python creatine.py detect "prompt"              # Adaptive (default)
 python creatine.py detect "prompt" --full       # Full (all tiers)
 python creatine.py detect-pipeline "prompt"     # Detection + forensics
@@ -64,6 +65,9 @@ python creatine.py detect-ensemble "prompt"     # Parallel voting
 
 # Analysis
 python creatine.py forensics "prompt"           # Deep forensics
+
+# Learning
+python creatine.py learn logs/*.jsonl -v        # Learn from logs
 
 # Datasets
 python creatine.py list                         # List datasets
@@ -80,4 +84,18 @@ python creatine.py test <dataset> --compare     # Compare modes
 # Rules
 python creatine.py generate-rules --test-dataset <ds>   # Generate rules
 python creatine.py sync-feed                            # Sync from PromptIntel
+```
+
+## Learning Pipeline
+
+Creatine automatically logs all detections. Use the learning pipeline to improve detection:
+
+```bash
+# 1. Detections accumulate in logs/detections_YYYY-MM-DD.jsonl
+
+# 2. Periodically run learning
+python creatine.py learn logs/*.jsonl -v
+
+# 3. New rules are generated from patterns LLM caught but keywords missed
+# Output: creatine/rules/learned_rules.nov
 ```
