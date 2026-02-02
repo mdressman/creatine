@@ -210,7 +210,7 @@ class AdaptiveDetector:
             if self.verbose:
                 print(f"  Long prompt ({len(text)} chars)")
         
-        # Check for encoding/obfuscation
+        # Check for encoding/obfuscation patterns
         for pattern in self.config.encoding_patterns:
             if pattern in text:
                 reasons.append(EscalationReason.ENCODING_DETECTED)
@@ -232,6 +232,61 @@ class AdaptiveDetector:
                 reasons.append(EscalationReason.ENCODING_DETECTED)
                 if self.verbose:
                     print(f"  Unicode homoglyphs detected ({non_ascii} non-ASCII)")
+        
+        # Check for potential reversed text (words with unusual letter patterns)
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            words = re.findall(r'[a-zA-Z]{5,}', text)
+            common = _load_common_words()
+            for word in words:
+                if word.lower() not in common and word[::-1].lower() in common:
+                    reasons.append(EscalationReason.ENCODING_DETECTED)
+                    if self.verbose:
+                        print(f"  Potential reversed text detected: {word}")
+                    break
+        
+        # Check for character spacing (s p a c e d)
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            if re.search(r'\b[a-zA-Z](?:\s[a-zA-Z]){3,}\b', text):
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  Character spacing detected")
+        
+        # Check for hex encoding patterns
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            if re.search(r'\\x[0-9a-fA-F]{2}|0x[0-9a-fA-F]{2}', text):
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  Hex encoding detected")
+        
+        # Check for URL encoding
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            url_chars = re.findall(r'%[0-9a-fA-F]{2}', text)
+            if len(url_chars) >= 3:
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  URL encoding detected")
+        
+        # Check for HTML entities
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            if re.search(r'&#x?[0-9a-fA-F]+;', text):
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  HTML entities detected")
+        
+        # Check for binary patterns
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            if re.search(r'[01]{8}(?:\s+[01]{8}){2,}', text):
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  Binary encoding detected")
+        
+        # Check for zero-width characters
+        if EscalationReason.ENCODING_DETECTED not in reasons:
+            zero_width = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', '\u00ad']
+            if any(zw in text for zw in zero_width):
+                reasons.append(EscalationReason.ENCODING_DETECTED)
+                if self.verbose:
+                    print(f"  Zero-width characters detected")
         
         return len(reasons) > 0, reasons
     
@@ -344,6 +399,320 @@ class AdaptiveDetector:
         
         return None
     
+    def _try_decode_reversed(self, text: str) -> Optional[str]:
+        """Try to detect and decode reversed text."""
+        # Look for hints that text might be reversed
+        hints = ['reversed', 'reverse', 'backwards', 'backward', 'sdrawkcab']
+        text_lower = text.lower()
+        
+        if not any(hint in text_lower for hint in hints):
+            # Also check if any long words (5+ chars) decode to English when reversed
+            words = re.findall(r'[a-zA-Z]{5,}', text)
+            for word in words:
+                reversed_word = word[::-1].lower()
+                common_words = _load_common_words()
+                if reversed_word in common_words:
+                    # Found a reversed common word, decode the whole thing
+                    reversed_text = ' '.join(w[::-1] for w in text.split())
+                    if self._is_meaningful_english(reversed_text):
+                        if self.verbose:
+                            print(f"  Reversed text decoded: '{reversed_text[:50]}...'")
+                        return reversed_text
+            return None
+        
+        # Try reversing quoted portions or the whole message
+        patterns = [
+            r"['\"]([^'\"]{5,})['\"]",  # Quoted strings
+            r":\s*([a-zA-Z\s]{5,})",     # After colon
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                reversed_text = match[::-1]
+                if self._is_meaningful_english(reversed_text):
+                    if self.verbose:
+                        print(f"  Reversed text decoded: '{reversed_text[:50]}...'")
+                    return reversed_text
+        
+        return None
+    
+    def _try_decode_hex(self, text: str) -> Optional[str]:
+        """Try to decode hex-encoded text (\\x69\\x67 or 69 67 or 0x69 formats)."""
+        decoded_parts = []
+        
+        # Pattern 1: \x69\x67\x6e format
+        hex_escape = re.findall(r'\\x([0-9a-fA-F]{2})', text)
+        if len(hex_escape) >= 4:
+            try:
+                decoded = bytes.fromhex(''.join(hex_escape)).decode('utf-8')
+                if self._is_meaningful_english(decoded):
+                    if self.verbose:
+                        print(f"  Hex (\\x) decoded: '{decoded[:50]}...'")
+                    return decoded
+            except Exception:
+                pass
+        
+        # Pattern 2: 69 67 6e or 69676e format (space or no space separated)
+        hex_spaced = re.findall(r'(?:^|[\s:])([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2}){3,})', text)
+        for match in hex_spaced:
+            try:
+                hex_bytes = match.replace(' ', '')
+                decoded = bytes.fromhex(hex_bytes).decode('utf-8')
+                if self._is_meaningful_english(decoded):
+                    if self.verbose:
+                        print(f"  Hex (spaced) decoded: '{decoded[:50]}...'")
+                    return decoded
+            except Exception:
+                pass
+        
+        # Pattern 3: 0x69 0x67 format
+        hex_0x = re.findall(r'0x([0-9a-fA-F]{2})', text)
+        if len(hex_0x) >= 4:
+            try:
+                decoded = bytes.fromhex(''.join(hex_0x)).decode('utf-8')
+                if self._is_meaningful_english(decoded):
+                    if self.verbose:
+                        print(f"  Hex (0x) decoded: '{decoded[:50]}...'")
+                    return decoded
+            except Exception:
+                pass
+        
+        return None
+    
+    def _try_decode_url(self, text: str) -> Optional[str]:
+        """Try to decode URL-encoded text (%69%67%6e or %20 formats)."""
+        from urllib.parse import unquote
+        
+        # Check if there are URL-encoded sequences
+        if '%' not in text:
+            return None
+        
+        # Count URL-encoded chars - need at least a few
+        url_chars = re.findall(r'%[0-9a-fA-F]{2}', text)
+        if len(url_chars) < 3:
+            return None
+        
+        try:
+            # Decode the whole text
+            decoded = unquote(text)
+            if decoded != text and self._is_meaningful_english(decoded):
+                if self.verbose:
+                    print(f"  URL decoded: '{decoded[:50]}...'")
+                return decoded
+        except Exception:
+            pass
+        
+        return None
+    
+    def _normalize_spacing(self, text: str) -> Optional[str]:
+        """Detect and normalize character-spaced text (i g n o r e -> ignore)."""
+        # Pattern: single chars separated by spaces (at least 4 in a row)
+        spaced_pattern = r'\b([a-zA-Z](?:\s[a-zA-Z]){3,})\b'
+        matches = re.findall(spaced_pattern, text)
+        
+        if not matches:
+            return None
+        
+        # Reconstruct by removing spaces between single chars
+        normalized = text
+        for match in matches:
+            # Collapse spaced chars into word, preserve word boundaries
+            collapsed = match.replace(' ', '')
+            normalized = normalized.replace(match, collapsed)
+        
+        # Check if normalized text is meaningful (collapse creates real words)
+        if normalized != text and self._is_meaningful_english(normalized):
+            if self.verbose:
+                print(f"  Spacing normalized: '{normalized[:50]}...'")
+            return normalized
+        
+        return None
+    
+    def _strip_zero_width(self, text: str) -> Optional[str]:
+        """Remove zero-width characters that may be hiding between letters."""
+        # Zero-width characters
+        zero_width = [
+            '\u200b',  # Zero-width space
+            '\u200c',  # Zero-width non-joiner
+            '\u200d',  # Zero-width joiner
+            '\u2060',  # Word joiner
+            '\ufeff',  # Zero-width no-break space (BOM)
+            '\u00ad',  # Soft hyphen
+        ]
+        
+        # Check if any zero-width chars present
+        has_zero_width = any(zw in text for zw in zero_width)
+        if not has_zero_width:
+            return None
+        
+        # Strip them
+        cleaned = text
+        for zw in zero_width:
+            cleaned = cleaned.replace(zw, '')
+        
+        if cleaned != text:
+            if self.verbose:
+                print(f"  Zero-width chars stripped ({len(text) - len(cleaned)} removed)")
+            return cleaned
+        
+        return None
+    
+    def _try_decode_html_entities(self, text: str) -> Optional[str]:
+        """Decode HTML entities (&#105;&#103; or &lt; formats)."""
+        import html
+        
+        # Check for HTML entity patterns
+        if '&#' not in text and '&' not in text:
+            return None
+        
+        # Check for numeric entities (&#105; or &#x69;)
+        if re.search(r'&#x?[0-9a-fA-F]+;', text):
+            try:
+                decoded = html.unescape(text)
+                if decoded != text and self._is_meaningful_english(decoded):
+                    if self.verbose:
+                        print(f"  HTML entities decoded: '{decoded[:50]}...'")
+                    return decoded
+            except Exception:
+                pass
+        
+        return None
+    
+    def _try_decode_binary(self, text: str) -> Optional[str]:
+        """Decode binary (01101000 01101001) or morse code."""
+        # Binary: sequences of 8-bit groups
+        binary_pattern = r'[01]{8}(?:\s+[01]{8}){2,}'
+        binary_matches = re.findall(binary_pattern, text)
+        
+        for match in binary_matches:
+            try:
+                bytes_list = match.split()
+                decoded = ''.join(chr(int(b, 2)) for b in bytes_list)
+                if self._is_meaningful_english(decoded):
+                    if self.verbose:
+                        print(f"  Binary decoded: '{decoded[:50]}...'")
+                    return decoded
+            except Exception:
+                pass
+        
+        # Morse code: sequences of dots and dashes
+        morse_dict = {
+            '.-': 'a', '-...': 'b', '-.-.': 'c', '-..': 'd', '.': 'e',
+            '..-.': 'f', '--.': 'g', '....': 'h', '..': 'i', '.---': 'j',
+            '-.-': 'k', '.-..': 'l', '--': 'm', '-.': 'n', '---': 'o',
+            '.--.': 'p', '--.-': 'q', '.-.': 'r', '...': 's', '-': 't',
+            '..-': 'u', '...-': 'v', '.--': 'w', '-..-': 'x', '-.--': 'y',
+            '--..': 'z', '.----': '1', '..---': '2', '...--': '3',
+            '....-': '4', '.....': '5', '-....': '6', '--...': '7',
+            '---..': '8', '----.': '9', '-----': '0', '/': ' '
+        }
+        
+        # Check if text looks like morse (dots, dashes, spaces, slashes)
+        if re.search(r'[\.\-]{2,}', text):
+            # Split by word separator (/ or multiple spaces) then by letter separator
+            morse_text = text.replace('/', ' / ')
+            words = re.split(r'\s{2,}|\s*/\s*', morse_text)
+            decoded_words = []
+            
+            for word in words:
+                if word.strip() == '':
+                    continue
+                letters = word.split()
+                decoded_word = ''
+                for letter in letters:
+                    if letter in morse_dict:
+                        decoded_word += morse_dict[letter]
+                    elif letter == '/':
+                        decoded_word += ' '
+                decoded_words.append(decoded_word)
+            
+            decoded = ' '.join(decoded_words)
+            if len(decoded) > 3 and self._is_meaningful_english(decoded):
+                if self.verbose:
+                    print(f"  Morse decoded: '{decoded[:50]}...'")
+                return decoded
+        
+        return None
+    
+    def _try_decode_pig_latin(self, text: str) -> Optional[str]:
+        """Decode Pig Latin (ignoreway -> ignore)."""
+        # Pig Latin patterns: words ending in 'ay' with consonant cluster moved
+        pig_latin_words = re.findall(r'\b([a-zA-Z]+ay)\b', text.lower())
+        
+        if len(pig_latin_words) < 2:
+            return None
+        
+        def decode_pig_word(word: str) -> str:
+            if not word.endswith('ay'):
+                return word
+            # Remove 'ay' suffix
+            core = word[:-2]
+            if not core:
+                return word
+            # Common patterns: consonant(s) moved to end + ay
+            # Try moving last 1, 2, or 3 chars back to front
+            for i in range(1, min(4, len(core))):
+                candidate = core[-i:] + core[:-i]
+                if candidate in _load_common_words():
+                    return candidate
+            # If word started with vowel, just remove 'way' or 'ay'
+            if core.endswith('w'):
+                return core[:-1]
+            return core
+        
+        # Decode all words
+        decoded_words = []
+        for word in text.split():
+            word_lower = word.lower()
+            if word_lower.endswith('ay') and len(word_lower) > 3:
+                decoded_words.append(decode_pig_word(word_lower))
+            else:
+                decoded_words.append(word_lower)
+        
+        decoded = ' '.join(decoded_words)
+        if decoded != text.lower() and self._is_meaningful_english(decoded):
+            if self.verbose:
+                print(f"  Pig Latin decoded: '{decoded[:50]}...'")
+            return decoded
+        
+        return None
+    
+    def _try_all_decodings(self, text: str) -> List[Tuple[str, str]]:
+        """
+        Try all obfuscation decoders and return list of (technique, decoded_text).
+        Used by semantic tier to catch encoded attacks.
+        """
+        decodings = []
+        
+        # Strip zero-width first as it may affect other decodings
+        stripped = self._strip_zero_width(text)
+        if stripped:
+            text = stripped
+            decodings.append(('zero_width', stripped))
+        
+        # Try each decoder
+        decoders = [
+            ('rot13', self._try_decode_rot13),
+            ('reversed', self._try_decode_reversed),
+            ('hex', self._try_decode_hex),
+            ('url', self._try_decode_url),
+            ('spacing', self._normalize_spacing),
+            ('html_entities', self._try_decode_html_entities),
+            ('binary_morse', self._try_decode_binary),
+            ('pig_latin', self._try_decode_pig_latin),
+        ]
+        
+        for name, decoder in decoders:
+            try:
+                result = decoder(text)
+                if result:
+                    decodings.append((name, result))
+            except Exception:
+                pass  # Skip failed decoders
+        
+        return decodings
+    
     async def analyze(self, prompt: str) -> AdaptiveResult:
         """
         Analyze a prompt using adaptive tiered detection.
@@ -444,25 +813,18 @@ class AdaptiveDetector:
                     if decoded_result.is_threat:
                         result = decoded_result
                 
-                # Try base64 decoding if still no match
+                # Try all other obfuscation decoders
                 if not result.is_threat:
-                    base64_decoded = self._try_decode_base64(prompt)
-                    if base64_decoded:
+                    decodings = self._try_all_decodings(prompt)
+                    for technique, decoded_text in decodings:
                         if self.verbose:
-                            print(f"  Trying base64 decode: '{base64_decoded[:40]}...'")
-                        decoded_result = await tier2.analyze(base64_decoded)
+                            print(f"  Trying {technique} decode: '{decoded_text[:40]}...'")
+                        decoded_result = await tier2.analyze(decoded_text)
                         if decoded_result.is_threat:
                             result = decoded_result
-                
-                # Try ROT13 decoding if still no match
-                if not result.is_threat:
-                    rot13_decoded = self._try_decode_rot13(prompt)
-                    if rot13_decoded and rot13_decoded != prompt:
-                        if self.verbose:
-                            print(f"  Trying ROT13 decode: '{rot13_decoded[:40]}...'")
-                        decoded_result = await tier2.analyze(rot13_decoded)
-                        if decoded_result.is_threat:
-                            result = decoded_result
+                            if self.verbose:
+                                print(f"  → Threat found via {technique} decoding")
+                            break
             
             elapsed = (time.perf_counter() - start) * 1000
             timing["tier2_ms"] = elapsed
