@@ -251,7 +251,7 @@ Respond with JSON:
         
         Useful for full pipeline analysis.
         """
-        from core import AdaptiveDetector
+        from creatine import AdaptiveDetector
         
         # First, detect
         detector = AdaptiveDetector(verbose=self.verbose)

@@ -133,7 +133,7 @@ class DetectorAgent(BaseAgent):
     
     def _get_detector(self):
         if self._detector is None:
-            from core import ThreatDetector
+            from creatine import ThreatDetector
             self._detector = ThreatDetector(
                 enable_semantics=self.enable_semantics,
                 enable_llm=self.enable_llm,
@@ -162,7 +162,7 @@ class AdaptiveDetectorAgent(BaseAgent):
     
     def _get_detector(self):
         if self._detector is None:
-            from core import AdaptiveDetector
+            from creatine import AdaptiveDetector
             self._detector = AdaptiveDetector()
         return self._detector
     
