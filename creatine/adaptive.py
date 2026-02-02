@@ -174,6 +174,24 @@ class AdaptiveDetector:
             decoded.append(leetspeak_map.get(char, char))
         return ''.join(decoded)
     
+    def _try_decode_base64(self, text: str) -> Optional[str]:
+        """Try to decode base64 encoded text."""
+        import base64
+        # Check if it looks like base64 (alphanumeric + /+ and = padding)
+        clean = text.strip()
+        if not re.match(r'^[A-Za-z0-9+/]+=*$', clean):
+            return None
+        if len(clean) < 8:  # Too short to be meaningful base64
+            return None
+        try:
+            decoded = base64.b64decode(clean).decode('utf-8')
+            # Only return if it looks like readable text
+            if decoded.isprintable() and len(decoded) > 3:
+                return decoded
+        except Exception:
+            pass
+        return None
+    
     async def analyze(self, prompt: str) -> AdaptiveResult:
         """
         Analyze a prompt using adaptive tiered detection.
@@ -264,8 +282,9 @@ class AdaptiveDetector:
             # Analyze original prompt
             result = await tier2.analyze(prompt)
             
-            # If obfuscation was detected and original didn't match, try decoded
+            # If obfuscation was detected and original didn't match, try decoding
             if not result.is_threat and obfuscation_detected:
+                # Try leetspeak decoding
                 decoded_prompt = self._decode_leetspeak(prompt)
                 if decoded_prompt != prompt:
                     decoded_result = await tier2.analyze(decoded_prompt)
@@ -273,6 +292,18 @@ class AdaptiveDetector:
                         result = decoded_result
                         if self.verbose:
                             print(f"  Decoded leetspeak matched: '{decoded_prompt[:40]}...'")
+                
+                # Try base64 decoding if still no match
+                if not result.is_threat:
+                    base64_decoded = self._try_decode_base64(prompt)
+                    if base64_decoded:
+                        if self.verbose:
+                            print(f"  Decoded base64: '{base64_decoded[:40]}...'")
+                        decoded_result = await tier2.analyze(base64_decoded)
+                        if decoded_result.is_threat:
+                            result = decoded_result
+                            if self.verbose:
+                                print(f"  Base64 content is THREAT")
             
             elapsed = (time.perf_counter() - start) * 1000
             timing["tier2_ms"] = elapsed
