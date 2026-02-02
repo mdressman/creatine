@@ -35,11 +35,15 @@ class AdaptiveDetector:
         print(f"Threat: {result.is_threat} (Tier: {result.tier_used.name})")
     """
     
+    # Default log directory
+    DEFAULT_LOG_DIR = "logs"
+    
     def __init__(
         self,
         config: Optional[AdaptiveConfig] = None,
         verbose: bool = False,
         log_file: Optional[str] = None,
+        enable_logging: bool = True,
     ):
         """
         Initialize the adaptive detector.
@@ -47,11 +51,18 @@ class AdaptiveDetector:
         Args:
             config: Adaptive detection configuration
             verbose: Print detailed analysis info
-            log_file: Optional JSONL file path to log all detections for learning
+            log_file: Custom log file path (default: auto-generated daily log)
+            enable_logging: Enable detection logging (default: True)
         """
         self.config = config or AdaptiveConfig()
         self.verbose = verbose
-        self.log_file = log_file
+        self.enable_logging = enable_logging
+        
+        # Set up logging
+        if enable_logging:
+            self.log_file = log_file or self._get_default_log_file()
+        else:
+            self.log_file = None
         
         # Lazy-initialized tier clients
         self._tier1_client: Optional[ThreatDetector] = None
@@ -67,7 +78,25 @@ class AdaptiveDetector:
             "total_time_ms": 0,
         }
     
-    def _log_detection(self, prompt: str, result: "AdaptiveResult") -> None:
+    def _get_default_log_file(self) -> str:
+        """Get default log file path with daily rotation."""
+        from datetime import datetime
+        from pathlib import Path
+        
+        # Create logs directory if needed
+        log_dir = Path(self.DEFAULT_LOG_DIR)
+        log_dir.mkdir(exist_ok=True)
+        
+        # Daily log file: logs/detections_2026-02-02.jsonl
+        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        return str(log_dir / f"detections_{date_str}.jsonl")
+    
+    def _log_detection(
+        self, 
+        prompt: str, 
+        result: "AdaptiveResult",
+        forensics: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Log detection result to JSONL file for learning pipeline."""
         if not self.log_file:
             return
@@ -82,8 +111,19 @@ class AdaptiveDetector:
             "confidence": result.confidence,
             "risk_score": result.risk_score,
             "attack_types": result.attack_types,
+            "escalation_reasons": [str(r[1].name) for r in result.escalation_path] if result.escalation_path else [],
+            "timing_ms": result.timing,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
+        
+        # Add forensics data if available
+        if forensics:
+            log_entry["forensics"] = {
+                "severity": forensics.get("severity"),
+                "risk_score": forensics.get("risk_score"),
+                "techniques": forensics.get("techniques", []),
+                "recommendations": forensics.get("recommendations", []),
+            }
         
         try:
             with open(self.log_file, "a") as f:
@@ -407,7 +447,7 @@ class AdaptiveDetector:
             details=final_result.details,
         )
         
-        # Log for learning pipeline
+        # Log for learning pipeline (without forensics - use log_with_forensics for that)
         self._log_detection(prompt, adaptive_result)
         
         if self.verbose:
@@ -418,6 +458,32 @@ class AdaptiveDetector:
             print(f"{'='*60}\n")
         
         return adaptive_result
+    
+    def log_with_forensics(self, prompt: str, result: "AdaptiveResult", forensics_report) -> None:
+        """
+        Update the log entry with forensics data.
+        
+        Call this after running forensics analysis to enrich the log entry.
+        This overwrites the last log entry for this prompt with forensics data.
+        """
+        if not self.log_file:
+            return
+        
+        # Convert forensics report to dict
+        forensics_data = None
+        if forensics_report:
+            forensics_data = {
+                "severity": getattr(forensics_report, 'severity', None),
+                "risk_score": getattr(forensics_report, 'risk_score', None),
+                "techniques": [
+                    {"name": t.name, "category": t.category, "confidence": t.confidence}
+                    for t in getattr(forensics_report, 'techniques', [])[:5]
+                ],
+                "recommendations": getattr(forensics_report, 'recommendations', [])[:3],
+            }
+        
+        # Re-log with forensics (we accept the duplicate - learning pipeline dedupes)
+        self._log_detection(prompt, result, forensics=forensics_data)
     
     async def analyze_batch(
         self, 

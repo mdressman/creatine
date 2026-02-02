@@ -31,8 +31,8 @@ def cmd_detect(args):
             config = AdaptiveConfig(
                 high_confidence_threshold=args.confidence_threshold or 0.85,
             )
-            log_file = getattr(args, 'log', None)
-            detector = AdaptiveDetector(config=config, verbose=args.verbose, log_file=log_file)
+            enable_logging = not getattr(args, 'no_log', False)
+            detector = AdaptiveDetector(config=config, verbose=args.verbose, enable_logging=enable_logging)
             result = await detector.analyze(args.prompt)
             
             status = "🚨 THREAT" if result.is_threat else "✅ SAFE"
@@ -42,8 +42,8 @@ def cmd_detect(args):
                 print(f"   Attack types: {', '.join(result.attack_types)}")
             if args.verbose:
                 print(f"   Cost saved: {result.cost_saved}")
-            if log_file:
-                print(f"   Logged to: {log_file}")
+                if enable_logging and detector.log_file:
+                    print(f"   Logged to: {detector.log_file}")
         else:
             # Full mode - runs all three tiers
             detector = ThreatDetector(
@@ -161,8 +161,8 @@ def cmd_test(args):
         # Use adaptive detector for testing
         async def run_adaptive():
             from creatine import AdaptiveDetector
-            log_file = getattr(args, 'log', None)
-            detector = AdaptiveDetector(verbose=args.verbose, log_file=log_file)
+            enable_logging = not getattr(args, 'no_log', False)
+            detector = AdaptiveDetector(verbose=args.verbose, enable_logging=enable_logging)
             
             dataset = registry.get(args.name)
             if not dataset:
@@ -170,8 +170,8 @@ def cmd_test(args):
                 return
             
             print(f"Testing {len(dataset)} prompts with Adaptive detection...")
-            if log_file:
-                print(f"  Logging to: {log_file}")
+            if enable_logging and detector.log_file:
+                print(f"  Logging to: {detector.log_file}")
             
             correct = 0
             tier_counts = {1: 0, 2: 0, 3: 0}
@@ -207,8 +207,8 @@ def cmd_test(args):
             print(f"  Tier 2 (Semantics): {tier_counts[2]:3d} ({stats['tier2_stop_rate']:.1%})")
             print(f"  Tier 3 (LLM):       {tier_counts[3]:3d} ({stats['tier3_stop_rate']:.1%})")
             print(f"{'='*60}")
-            if log_file:
-                print(f"\nDetections logged to: {log_file}")
+            if enable_logging and detector.log_file:
+                print(f"\nDetections logged to: {detector.log_file}")
         
         asyncio.run(run_adaptive())
         return
@@ -590,6 +590,7 @@ Examples:
   creatine detect-ensemble "test prompt"     # Parallel voting ensemble
   creatine test common_jailbreaks            # Test against dataset
   creatine forensics "suspicious prompt"     # Deep forensic analysis
+  creatine learn logs/detections_*.jsonl     # Learn from accumulated logs
 """,
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -601,12 +602,13 @@ Examples:
                    help="Run all detection tiers (default: adaptive)")
     p.add_argument("--confidence-threshold", type=float, 
                    help="Confidence threshold for adaptive mode (default: 0.85)")
-    p.add_argument("--log", metavar="FILE", help="Log detections to JSONL file for learning")
+    p.add_argument("--no-log", action="store_true", help="Disable logging (default: logs to logs/)")
     p.add_argument("-v", "--verbose", action="store_true")
     
     # detect-pipeline
-    p = subparsers.add_parser("detect-pipeline", help="Detection pipeline (detect → forensics)")
+    p = subparsers.add_parser("detect-pipeline", help="Detection pipeline (detect → forensics → learning)")
     p.add_argument("prompt", help="Prompt to analyze")
+    p.add_argument("--no-log", action="store_true", help="Disable logging")
     p.add_argument("-v", "--verbose", action="store_true")
     
     # detect-ensemble
@@ -624,7 +626,7 @@ Examples:
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--default-only", action="store_true")
     p.add_argument("--compare", action="store_true", help="Compare Adaptive vs Full modes")
-    p.add_argument("--log", metavar="FILE", help="Log detections to JSONL file for learning")
+    p.add_argument("--no-log", action="store_true", help="Disable logging")
     
     # list
     subparsers.add_parser("list", help="List datasets")

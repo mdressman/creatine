@@ -170,6 +170,11 @@ class AdaptiveDetectorAgent(BaseAgent):
         detector = self._get_detector()
         prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", str(input_data))
         result = await detector.analyze(prompt)
+        
+        # Store detector in context for learning stage to use
+        if context is not None:
+            context["_detector"] = detector
+        
         return {
             "is_threat": result.is_threat,
             "confidence": result.confidence,
@@ -177,6 +182,7 @@ class AdaptiveDetectorAgent(BaseAgent):
             "attack_types": result.attack_types,
             "tier_used": result.tier_used.name,
             "timing": result.timing,
+            "details": result.details,
         }
 
 
@@ -570,11 +576,67 @@ class Orchestrator:
 # Pre-built Orchestration Patterns
 # =============================================================================
 
-def create_detection_pipeline(include_forensics: bool = True) -> Orchestrator:
+class LearningAgentWrapper(BaseAgent):
+    """
+    Agent that logs detection results with forensics for learning pipeline.
+    
+    This agent doesn't modify results - it just ensures proper logging
+    with enriched forensics data for the adaptive learning system.
+    """
+    
+    def __init__(self, name: str = "LearningLogger"):
+        super().__init__(name)
+    
+    async def execute(self, input_data: Any, context: Dict[str, Any] = None) -> Any:
+        """Log detection + forensics for learning, pass through unchanged."""
+        context = context or {}
+        
+        # Get the original detection result and forensics
+        detect_result = context.get("detect_result", {})
+        forensics_result = context.get("forensics_result")
+        original_prompt = context.get("original_input", "")
+        
+        # Get detector from context to log with forensics
+        detector = context.get("_detector")
+        
+        if detector and hasattr(detector, 'log_with_forensics'):
+            # Create a minimal AdaptiveResult-like object for logging
+            from creatine.models import AdaptiveResult, DetectionTier
+            
+            # Build result from context
+            tier_name = detect_result.get("tier_used", "KEYWORDS")
+            tier = getattr(DetectionTier, tier_name, DetectionTier.KEYWORDS)
+            
+            result = AdaptiveResult(
+                is_threat=detect_result.get("is_threat", False),
+                confidence=detect_result.get("confidence", 0.5),
+                risk_score=detect_result.get("risk_score", "Low"),
+                attack_types=detect_result.get("attack_types", []),
+                tier_used=tier,
+                escalation_path=[],
+                timing=detect_result.get("timing", {}),
+                details=detect_result.get("details", {}),
+            )
+            
+            detector.log_with_forensics(original_prompt, result, forensics_result)
+        
+        # Pass through the input unchanged
+        return input_data
+
+
+def create_detection_pipeline(
+    include_forensics: bool = True,
+    include_learning: bool = True,
+) -> Orchestrator:
     """
     Create a standard detection pipeline:
-    1. Adaptive detection
+    1. Adaptive detection (with logging)
     2. Forensics (if threat detected) - non-critical, may fail with content filters
+    3. Learning logger (enriches log with forensics data)
+    
+    Args:
+        include_forensics: Run forensics analysis on threats (default: True)
+        include_learning: Log for adaptive learning pipeline (default: True)
     """
     orchestrator = Orchestrator("DetectionPipeline")
     
@@ -589,7 +651,31 @@ def create_detection_pipeline(include_forensics: bool = True) -> Orchestrator:
             critical=False,  # Forensics may fail due to content filters - don't fail pipeline
         )
     
+    if include_learning and include_forensics:
+        # Add learning stage to capture forensics-enriched logs
+        orchestrator.add_stage(
+            "learning",
+            LearningAgentWrapper(),
+            condition=lambda ctx: ctx.get("detect_result", {}).get("is_threat", False),
+            transform_input=lambda data, ctx: data,  # Pass through
+            critical=False,
+        )
+    
     return orchestrator
+
+
+def create_full_learning_pipeline() -> Orchestrator:
+    """
+    Create a comprehensive pipeline that:
+    1. Detects threats with adaptive multi-tier analysis
+    2. Runs forensics on detected threats  
+    3. Logs everything for the learning pipeline
+    4. Optionally triggers rule generation on accumulated gaps
+    
+    All detections are logged to logs/detections_YYYY-MM-DD.jsonl
+    which can be processed with: python creatine.py learn logs/detections_*.jsonl
+    """
+    return create_detection_pipeline(include_forensics=True, include_learning=True)
 
 
 def create_ensemble_detector(

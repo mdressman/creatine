@@ -11,6 +11,9 @@ __pycache__/
 # Reports (optional - uncomment to track)
 # reports/
 
+# Detection logs (for learning pipeline)
+logs/
+
 # Large datasets (keep only small curated ones)
 datasets/neuralchemy_*.json
 

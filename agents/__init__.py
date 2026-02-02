@@ -14,6 +14,7 @@ from .orchestrator import (
     AdaptiveDetectorAgent,
     ForensicsAgentWrapper,
     LLMDetectorAgent,
+    LearningAgentWrapper,
     # Orchestration patterns
     Pipeline,
     ParallelExecutor,
@@ -21,6 +22,7 @@ from .orchestrator import (
     Orchestrator,
     # Pre-built patterns
     create_detection_pipeline,
+    create_full_learning_pipeline,
     create_ensemble_detector,
     create_tiered_router,
     # Enums
@@ -50,6 +52,7 @@ __all__ = [
     "AdaptiveDetectorAgent",
     "ForensicsAgentWrapper",
     "LLMDetectorAgent",
+    "LearningAgentWrapper",
     # Orchestration patterns
     "Pipeline",
     "ParallelExecutor",
@@ -57,6 +60,7 @@ __all__ = [
     "Orchestrator",
     # Pre-built
     "create_detection_pipeline",
+    "create_full_learning_pipeline",
     "create_ensemble_detector",
     "create_tiered_router",
     # Enums
