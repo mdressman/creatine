@@ -1,17 +1,34 @@
 # Creatine
 
-A prompt security platform for detecting prompt injection and jailbreak attacks using adaptive multi-tier detection with Nova pattern matching, semantic similarity, and LLM analysis.
+**A self-improving prompt security platform** that detects prompt injection and jailbreak attacks through adaptive multi-tier detection. Automatically learns from production traffic to continuously strengthen defenses while optimizing costs.
 
 ## Features
 
-- **Adaptive Detection**: Intelligent tiered analysis that optimizes for cost vs accuracy
-  - Tier 1: Keywords (~1ms) - catches obvious attacks
-  - Tier 2: Semantics (~25ms) - catches obfuscated attacks  
-  - Tier 3: LLM (~6s) - catches sophisticated attacks
-- **Nova Pattern Matching**: Local YARA-style rule engine for fast threat detection
-- **AI-Powered Rule Generation**: Uses Azure OpenAI to generate sophisticated detection rules
-- **Multiple Data Sources**: Ingest threats from PromptIntel API, HuggingFace datasets, or local files
-- **Test Harness**: Comprehensive testing with accuracy, precision, recall, and F1 metrics
+- **Adaptive Multi-Tier Detection**: Intelligent escalation through Keywords → Semantics → LLM
+  - Tier 1: Keywords (~1ms) - Nova pattern matching catches obvious attacks
+  - Tier 2: Semantics (~25ms) - Embedding similarity catches obfuscated attacks  
+  - Tier 3: LLM (~6s) - Azure OpenAI catches sophisticated attacks
+  - **~85% cost savings** compared to always running full analysis
+
+- **Self-Improving Detection**: Automatically logs all detections and learns from gaps
+  - Identifies attacks caught by LLM but missed by keywords
+  - Clusters similar attack patterns using embeddings
+  - Generates new rules to catch future variants faster
+  
+- **Multi-Agent Orchestration**: Composable detection pipelines
+  - Sequential pipelines (detect → forensics → log)
+  - Parallel ensemble voting across multiple LLM models
+  - Conditional routing based on threat signals
+
+- **Attack Forensics**: Deep analysis explains WHY something was flagged
+  - Identifies specific attack techniques (role hijacking, instruction override, etc.)
+  - Provides severity assessment and risk scoring
+  - Generates actionable recommendations
+
+- **Production Ready**: Clean CLI, Python API, and batch processing
+  - Import datasets from HuggingFace, CSV, or PromptIntel feeds
+  - Comprehensive testing with precision, recall, and F1 metrics
+  - Jupyter notebook integration for Kusto/Azure Data Explorer
 
 ## Quick Start
 
