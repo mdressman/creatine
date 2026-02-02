@@ -11,15 +11,39 @@ Tiers:
 """
 
 import asyncio
+import os
 import re
 import time
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Set
 
 from .models import (
     ThreatAnalysis, AdaptiveResult, AdaptiveConfig,
     DetectionTier, EscalationReason
 )
 from .detector import ThreatDetector
+
+# Load common English words once at module level
+_COMMON_WORDS: Set[str] = set()
+
+def _load_common_words() -> Set[str]:
+    """Load common English words from data file."""
+    global _COMMON_WORDS
+    if _COMMON_WORDS:
+        return _COMMON_WORDS
+    
+    data_file = os.path.join(os.path.dirname(__file__), 'data', 'common_words.txt')
+    try:
+        with open(data_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if line and not line.startswith('#'):
+                    _COMMON_WORDS.add(line.lower())
+    except FileNotFoundError:
+        # Fallback to minimal set if file missing
+        _COMMON_WORDS = {'the', 'a', 'is', 'to', 'and', 'of', 'in', 'for', 'you', 'it'}
+    
+    return _COMMON_WORDS
 
 
 class AdaptiveDetector:
@@ -243,7 +267,7 @@ class AdaptiveDetector:
         return ''.join(decoded)
     
     def _try_decode_base64(self, text: str) -> Optional[str]:
-        """Try to decode base64 encoded text."""
+        """Try to decode base64 encoded text. Returns decoded if meaningful English."""
         import base64
         # Check if it looks like base64 (alphanumeric + /+ and = padding)
         clean = text.strip()
@@ -253,8 +277,8 @@ class AdaptiveDetector:
             return None
         try:
             decoded = base64.b64decode(clean).decode('utf-8')
-            # Only return if it looks like readable text
-            if decoded.isprintable() and len(decoded) > 3:
+            # Only return if it's meaningful English (using shared heuristic)
+            if decoded.isprintable() and self._is_meaningful_english(decoded):
                 return decoded
         except Exception:
             pass
@@ -272,53 +296,10 @@ class AdaptiveDetector:
         Uses a simple heuristic: what percentage of words are common English words?
         If above threshold, it's likely intentionally encoded meaningful text.
         """
-        # Common English words (~500 most frequent + security-relevant terms)
-        common_words = {
-            # Top 100 most common
-            'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
-            'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
-            'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
-            'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what',
-            'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me',
-            'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know', 'take',
-            'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other',
-            'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also',
-            'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way',
-            'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us',
-            # Common verbs
-            'is', 'are', 'was', 'were', 'been', 'has', 'had', 'did', 'does',
-            'tell', 'ask', 'show', 'try', 'leave', 'call', 'keep', 'let', 'begin', 'seem',
-            'help', 'talk', 'turn', 'start', 'might', 'should', 'need', 'feel', 'must',
-            'put', 'run', 'move', 'live', 'believe', 'hold', 'bring', 'happen', 'write', 'read',
-            'provide', 'sit', 'stand', 'lose', 'pay', 'meet', 'include', 'continue', 'set', 'learn',
-            'change', 'lead', 'understand', 'watch', 'follow', 'stop', 'create', 'speak', 'allow', 'add',
-            'spend', 'grow', 'open', 'walk', 'win', 'offer', 'remember', 'love', 'consider', 'appear',
-            'buy', 'wait', 'serve', 'die', 'send', 'expect', 'build', 'stay', 'fall', 'cut',
-            'reach', 'kill', 'remain', 'suggest', 'raise', 'pass', 'sell', 'require', 'report', 'decide',
-            # Common adjectives
-            'good', 'new', 'first', 'last', 'long', 'great', 'little', 'own', 'other', 'old',
-            'right', 'big', 'high', 'different', 'small', 'large', 'next', 'early', 'young', 'important',
-            'few', 'public', 'bad', 'same', 'able', 'quick', 'brown', 'lazy', 'fast', 'slow',
-            # Common nouns
-            'man', 'woman', 'child', 'world', 'life', 'hand', 'part', 'place', 'case', 'week',
-            'company', 'system', 'program', 'question', 'government', 'number', 'night', 'point', 'home', 'water',
-            'room', 'mother', 'area', 'money', 'story', 'fact', 'month', 'lot', 'study', 'book',
-            'eye', 'job', 'word', 'business', 'issue', 'side', 'kind', 'head', 'house', 'service',
-            'friend', 'father', 'power', 'hour', 'game', 'line', 'end', 'member', 'law', 'car',
-            'city', 'community', 'name', 'president', 'team', 'minute', 'idea', 'kid', 'body', 'information',
-            'dog', 'cat', 'fox', 'bird', 'fish', 'tree', 'flower', 'poem', 'song', 'color',
-            # Common adverbs/prepositions
-            'each', 'find', 'down', 'still', 'here', 'why', 'where', 'while', 'through', 'very',
-            'much', 'before', 'too', 'mean', 'never', 'always', 'every', 'under', 'again', 'however',
-            # Security/tech relevant
-            'please', 'system', 'prompt', 'ignore', 'previous', 'instructions', 'forget', 'pretend', 'act', 'role',
-            'secret', 'password', 'code', 'message', 'decode', 'encrypt', 'hidden', 'bypass', 'override', 'admin',
-            'user', 'data', 'file', 'access', 'command', 'execute', 'reveal', 'show', 'tell', 'give',
-            'hack', 'bomb', 'weapon', 'attack', 'exploit', 'inject', 'script', 'output', 'input', 'text',
-        }
+        common_words = _load_common_words()
         
-        # Extract words (letters only)
-        words = re.findall(r'[a-zA-Z]+', text.lower())
+        # Extract words (letters only, 2+ chars)
+        words = [w for w in re.findall(r'[a-zA-Z]+', text.lower()) if len(w) >= 2]
         
         if len(words) < 3:
             return False  # Too short to judge
