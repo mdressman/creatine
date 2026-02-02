@@ -11,41 +11,15 @@ Tiers:
 """
 
 import asyncio
-import os
 import re
 import time
-from typing import Optional, Dict, Any, List, Tuple, Set
+from typing import Optional, Dict, Any, List, Tuple
 
 from .models import (
     ThreatAnalysis, AdaptiveResult, AdaptiveConfig,
     DetectionTier, EscalationReason
 )
 from .detector import ThreatDetector
-
-# Load common English words for quick pattern detection (reversed text, etc.)
-# Primary English detection uses langdetect; this is for fast heuristics only
-_COMMON_WORDS: Set[str] = set()
-
-def _load_common_words() -> Set[str]:
-    """Load common English words for quick pattern detection (e.g., reversed text)."""
-    global _COMMON_WORDS
-    if _COMMON_WORDS:
-        return _COMMON_WORDS
-    
-    data_file = os.path.join(os.path.dirname(__file__), 'data', 'common_words.txt')
-    try:
-        with open(data_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                # Skip comments and empty lines
-                if line and not line.startswith('#'):
-                    _COMMON_WORDS.add(line.lower())
-    except FileNotFoundError:
-        # Fallback to minimal set if file missing
-        _COMMON_WORDS = {'the', 'a', 'is', 'to', 'and', 'of', 'in', 'for', 'you', 'it',
-                         'ignore', 'system', 'prompt', 'instruction', 'previous', 'all'}
-    
-    return _COMMON_WORDS
 
 
 class AdaptiveDetector:
@@ -235,16 +209,16 @@ class AdaptiveDetector:
                 if self.verbose:
                     print(f"  Unicode homoglyphs detected ({non_ascii} non-ASCII)")
         
-        # Check for potential reversed text (words with unusual letter patterns)
+        # Check for potential reversed text (try reversing long words and see if result is English)
         if EscalationReason.ENCODING_DETECTED not in reasons:
             words = re.findall(r'[a-zA-Z]{5,}', text)
-            common = _load_common_words()
-            for word in words:
-                if word.lower() not in common and word[::-1].lower() in common:
+            if len(words) >= 2:
+                # Try reversing all words and check if result is English
+                reversed_text = ' '.join(w[::-1] for w in text.split())
+                if self._is_meaningful_english(reversed_text):
                     reasons.append(EscalationReason.ENCODING_DETECTED)
                     if self.verbose:
-                        print(f"  Potential reversed text detected: {word}")
-                    break
+                        print(f"  Potential reversed text detected")
         
         # Check for character spacing (s p a c e d)
         if EscalationReason.ENCODING_DETECTED not in reasons:
@@ -348,16 +322,17 @@ class AdaptiveDetector:
     
     def _is_meaningful_english(self, text: str, threshold: float = 0.7) -> bool:
         """
-        Check if text appears to be meaningful English (vs gibberish).
+        Check if text appears to be meaningful language (vs gibberish).
         
-        Uses langdetect for robust language detection.
+        Uses langdetect. For security purposes, we accept any detected natural
+        language since obfuscated text decoding to ANY language is suspicious.
         
         Args:
             text: Text to analyze
-            threshold: Confidence threshold for langdetect (0.0-1.0)
+            threshold: Confidence threshold (0.0-1.0)
         
         Returns:
-            True if text appears to be meaningful English
+            True if text appears to be meaningful natural language
         """
         # Need minimum text length for reliable detection
         if len(text) < 10:
@@ -368,17 +343,19 @@ class AdaptiveDetector:
             from langdetect.lang_detect_exception import LangDetectException
             
             results = detect_langs(text)
-            for result in results:
-                # Check if English with sufficient confidence
-                if result.lang == 'en' and result.prob >= threshold:
-                    if self.verbose:
-                        print(f"    langdetect: English ({result.prob:.0%} confidence)")
-                    return True
-                # If top language is NOT English with high confidence, reject
-                if result.prob >= 0.8 and result.lang != 'en':
-                    if self.verbose:
-                        print(f"    langdetect: {result.lang} ({result.prob:.0%}), not English")
-                    return False
+            if not results:
+                return False
+            
+            top = results[0]
+            
+            # Require higher confidence for meaningful detection
+            if top.prob >= threshold:
+                if self.verbose:
+                    print(f"    langdetect: {top.lang} ({top.prob:.0%} confidence)")
+                return True
+            
+            if self.verbose:
+                print(f"    langdetect: {top.lang} ({top.prob:.0%}), low confidence")
             return False
         except (LangDetectException, Exception) as e:
             if self.verbose:
@@ -426,18 +403,14 @@ class AdaptiveDetector:
         text_lower = text.lower()
         
         if not any(hint in text_lower for hint in hints):
-            # Also check if any long words (5+ chars) decode to English when reversed
-            words = re.findall(r'[a-zA-Z]{5,}', text)
-            for word in words:
-                reversed_word = word[::-1].lower()
-                common_words = _load_common_words()
-                if reversed_word in common_words:
-                    # Found a reversed common word, decode the whole thing
-                    reversed_text = ' '.join(w[::-1] for w in text.split())
-                    if self._is_meaningful_english(reversed_text):
-                        if self.verbose:
-                            print(f"  Reversed text decoded: '{reversed_text[:50]}...'")
-                        return reversed_text
+            # Try reversing all words and check if result is meaningful English
+            words = re.findall(r'[a-zA-Z]{3,}', text)
+            if len(words) >= 2:
+                reversed_text = ' '.join(w[::-1] for w in text.split())
+                if self._is_meaningful_english(reversed_text):
+                    if self.verbose:
+                        print(f"  Reversed text decoded: '{reversed_text[:50]}...'")
+                    return reversed_text
             return None
         
         # Try reversing quoted portions or the whole message
@@ -656,8 +629,8 @@ class AdaptiveDetector:
         return None
     
     def _try_decode_pig_latin(self, text: str) -> Optional[str]:
-        """Decode Pig Latin (ignoreway -> ignore)."""
-        # Pig Latin patterns: words ending in 'ay' with consonant cluster moved
+        """Decode Pig Latin (ignoreway -> ignore, ellohay -> hello)."""
+        # Pig Latin patterns: words ending in 'ay'
         pig_latin_words = re.findall(r'\b([a-zA-Z]+ay)\b', text.lower())
         
         if len(pig_latin_words) < 2:
@@ -666,19 +639,28 @@ class AdaptiveDetector:
         def decode_pig_word(word: str) -> str:
             if not word.endswith('ay'):
                 return word
+            
             # Remove 'ay' suffix
             core = word[:-2]
             if not core:
                 return word
-            # Common patterns: consonant(s) moved to end + ay
-            # Try moving last 1, 2, or 3 chars back to front
-            for i in range(1, min(4, len(core))):
-                candidate = core[-i:] + core[:-i]
-                if candidate in _load_common_words():
-                    return candidate
-            # If word started with vowel, just remove 'way' or 'ay'
+            
+            # Pattern 1: Word started with vowel, 'way' was added (ignoreway -> ignore)
             if core.endswith('w'):
                 return core[:-1]
+            
+            # Pattern 2: Consonant(s) moved to end + 'ay' (ellohay -> hello)
+            # Find where consonants end (they were moved from start)
+            # Try moving last 1, 2, or 3 chars back to start
+            vowels = 'aeiou'
+            for i in range(1, min(4, len(core))):
+                suffix = core[-i:]
+                prefix = core[:-i]
+                # The suffix should be consonants that were originally at the start
+                if suffix[0] not in vowels:
+                    candidate = suffix + prefix
+                    return candidate
+            
             return core
         
         # Decode all words
