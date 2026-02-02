@@ -260,6 +260,45 @@ class AdaptiveDetector:
             pass
         return None
     
+    def _decode_rot13(self, text: str) -> str:
+        """Decode ROT13 encoded text."""
+        import codecs
+        return codecs.decode(text, 'rot_13')
+    
+    def _try_decode_rot13(self, text: str) -> Optional[str]:
+        """
+        Try to decode ROT13 if the text looks like it might be encoded.
+        
+        ROT13 is tricky because any text is valid ROT13. We use heuristics:
+        - Text explicitly mentions ROT13
+        - Decoded version contains more common attack keywords
+        """
+        text_lower = text.lower()
+        
+        # If explicitly mentioned, decode the whole thing or extract quoted parts
+        if 'rot13' in text_lower or 'rot-13' in text_lower:
+            # Try to find quoted/encoded portions
+            import re
+            # Match quoted strings or strings after colons
+            patterns = [
+                r"['\"]([^'\"]+)['\"]",  # Quoted strings
+                r":\s*['\"]?([a-zA-Z\s]+)['\"]?",  # After colon
+            ]
+            for pattern in patterns:
+                matches = re.findall(pattern, text)
+                for match in matches:
+                    if len(match) > 5:  # Reasonable length
+                        decoded = self._decode_rot13(match)
+                        # Check if decoded has attack keywords
+                        attack_words = ['bomb', 'hack', 'kill', 'steal', 'ignore', 'bypass', 'password', 'secret']
+                        if any(word in decoded.lower() for word in attack_words):
+                            return decoded
+            
+            # Fall back to decoding the whole text
+            return self._decode_rot13(text)
+        
+        return None
+    
     async def analyze(self, prompt: str) -> AdaptiveResult:
         """
         Analyze a prompt using adaptive tiered detection.
@@ -367,6 +406,16 @@ class AdaptiveDetector:
                         if self.verbose:
                             print(f"  Trying base64 decode: '{base64_decoded[:40]}...'")
                         decoded_result = await tier2.analyze(base64_decoded)
+                        if decoded_result.is_threat:
+                            result = decoded_result
+                
+                # Try ROT13 decoding if still no match
+                if not result.is_threat:
+                    rot13_decoded = self._try_decode_rot13(prompt)
+                    if rot13_decoded and rot13_decoded != prompt:
+                        if self.verbose:
+                            print(f"  Trying ROT13 decode: '{rot13_decoded[:40]}...'")
+                        decoded_result = await tier2.analyze(rot13_decoded)
                         if decoded_result.is_threat:
                             result = decoded_result
             
