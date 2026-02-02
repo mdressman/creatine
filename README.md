@@ -153,6 +153,7 @@ print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
 ## Documentation
 
 - [CLI Reference](docs/cli.md) - All available commands
+- [Detection Logic](docs/detection-logic.md) - Confidence scoring and escalation explained
 - [Rule Generation](docs/rule-generation.md) - AI-powered rule generation
 - [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
 - [Comparison Report](docs/comparison-report.md) - Benchmark results
