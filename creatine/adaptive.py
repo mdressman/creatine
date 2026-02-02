@@ -22,11 +22,12 @@ from .models import (
 )
 from .detector import ThreatDetector
 
-# Load common English words once at module level
+# Load common English words for quick pattern detection (reversed text, etc.)
+# Primary English detection uses langdetect; this is for fast heuristics only
 _COMMON_WORDS: Set[str] = set()
 
 def _load_common_words() -> Set[str]:
-    """Load common English words from data file."""
+    """Load common English words for quick pattern detection (e.g., reversed text)."""
     global _COMMON_WORDS
     if _COMMON_WORDS:
         return _COMMON_WORDS
@@ -41,7 +42,8 @@ def _load_common_words() -> Set[str]:
                     _COMMON_WORDS.add(line.lower())
     except FileNotFoundError:
         # Fallback to minimal set if file missing
-        _COMMON_WORDS = {'the', 'a', 'is', 'to', 'and', 'of', 'in', 'for', 'you', 'it'}
+        _COMMON_WORDS = {'the', 'a', 'is', 'to', 'and', 'of', 'in', 'for', 'you', 'it',
+                         'ignore', 'system', 'prompt', 'instruction', 'previous', 'all'}
     
     return _COMMON_WORDS
 
@@ -348,8 +350,7 @@ class AdaptiveDetector:
         """
         Check if text appears to be meaningful English (vs gibberish).
         
-        Uses langdetect for robust language detection. Falls back to word list
-        heuristic if langdetect fails or text is too short.
+        Uses langdetect for robust language detection.
         
         Args:
             text: Text to analyze
@@ -359,45 +360,30 @@ class AdaptiveDetector:
             True if text appears to be meaningful English
         """
         # Need minimum text length for reliable detection
-        words = [w for w in re.findall(r'[a-zA-Z]+', text.lower()) if len(w) >= 2]
-        if len(words) < 2:
+        if len(text) < 10:
             return False
         
-        # Try langdetect first (more robust)
         try:
             from langdetect import detect_langs
             from langdetect.lang_detect_exception import LangDetectException
             
-            # langdetect needs sufficient text
-            if len(text) >= 10:
-                results = detect_langs(text)
-                for result in results:
-                    # Check if English with sufficient confidence
-                    if result.lang == 'en' and result.prob >= threshold:
-                        if self.verbose:
-                            print(f"    langdetect: English ({result.prob:.0%} confidence)")
-                        return True
-                    # If top language is NOT English with high confidence, likely not English
-                    if result.prob >= 0.8 and result.lang != 'en':
-                        if self.verbose:
-                            print(f"    langdetect: {result.lang} ({result.prob:.0%}), not English")
-                        return False
-        except (LangDetectException, Exception):
-            # langdetect can fail on short/unusual text, fall through to word list
-            pass
-        
-        # Fallback: word list heuristic for short text or when langdetect uncertain
-        common_words = _load_common_words()
-        if len(words) < 3:
+            results = detect_langs(text)
+            for result in results:
+                # Check if English with sufficient confidence
+                if result.lang == 'en' and result.prob >= threshold:
+                    if self.verbose:
+                        print(f"    langdetect: English ({result.prob:.0%} confidence)")
+                    return True
+                # If top language is NOT English with high confidence, reject
+                if result.prob >= 0.8 and result.lang != 'en':
+                    if self.verbose:
+                        print(f"    langdetect: {result.lang} ({result.prob:.0%}), not English")
+                    return False
             return False
-        
-        common_count = sum(1 for w in words if w in common_words)
-        ratio = common_count / len(words)
-        
-        if self.verbose and ratio >= 0.4:
-            print(f"    word list fallback: {ratio:.0%} common words")
-        
-        return ratio >= 0.4
+        except (LangDetectException, Exception) as e:
+            if self.verbose:
+                print(f"    langdetect failed: {e}")
+            return False
     
     def _try_decode_rot13(self, text: str) -> Optional[str]:
         """
