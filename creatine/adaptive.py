@@ -68,11 +68,11 @@ class AdaptiveDetector:
         """Initialize Tier 1: Keywords only."""
         if self._tier1_client is None:
             self._tier1_client = ThreatDetector(
-                verbose=self.verbose,
+                verbose=False,  # AdaptiveDetector handles verbose output
                 include_feed_rules=False,
                 enable_llm=False,
                 enable_semantics=False,
-                quiet=True,  # Suppress init messages, AdaptiveDetector handles output
+                quiet=True,
             )
         return self._tier1_client
     
@@ -80,7 +80,7 @@ class AdaptiveDetector:
         """Initialize Tier 2: Keywords + Semantics."""
         if self._tier2_client is None:
             self._tier2_client = ThreatDetector(
-                verbose=self.verbose,
+                verbose=False,
                 include_feed_rules=False,
                 enable_llm=False,
                 enable_semantics=True,
@@ -92,7 +92,7 @@ class AdaptiveDetector:
         """Initialize Tier 3: Full LLM analysis."""
         if self._tier3_client is None:
             self._tier3_client = ThreatDetector(
-                verbose=self.verbose,
+                verbose=False,
                 include_feed_rules=False,
                 enable_llm=True,
                 enable_semantics=True,
@@ -228,11 +228,11 @@ class AdaptiveDetector:
         if not result.is_threat and re.search(r'[a-z][0-9][a-z]|[0-9][a-z][0-9]', prompt.lower()):
             decoded_prompt = self._decode_leetspeak(prompt)
             if decoded_prompt != prompt:
+                if self.verbose:
+                    print(f"  Leetspeak detected, trying decoded: '{decoded_prompt[:40]}...'")
                 decoded_result = await tier1.analyze(decoded_prompt)
                 if decoded_result.is_threat:
                     result = decoded_result
-                    if self.verbose:
-                        print(f"  Decoded leetspeak: '{decoded_prompt[:40]}...'")
         
         elapsed = (time.perf_counter() - start) * 1000
         timing["tier1_ms"] = elapsed
@@ -240,8 +240,7 @@ class AdaptiveDetector:
         confidence = self._calculate_confidence(result)
         
         if self.verbose:
-            print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}")
-            print(f"  Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
+            print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}, Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
         
         # Decision: Stop or escalate?
         if result.is_threat and confidence >= self.config.high_confidence_threshold:
@@ -287,23 +286,21 @@ class AdaptiveDetector:
                 # Try leetspeak decoding
                 decoded_prompt = self._decode_leetspeak(prompt)
                 if decoded_prompt != prompt:
+                    if self.verbose:
+                        print(f"  Trying leetspeak decode: '{decoded_prompt[:40]}...'")
                     decoded_result = await tier2.analyze(decoded_prompt)
                     if decoded_result.is_threat:
                         result = decoded_result
-                        if self.verbose:
-                            print(f"  Decoded leetspeak matched: '{decoded_prompt[:40]}...'")
                 
                 # Try base64 decoding if still no match
                 if not result.is_threat:
                     base64_decoded = self._try_decode_base64(prompt)
                     if base64_decoded:
                         if self.verbose:
-                            print(f"  Decoded base64: '{base64_decoded[:40]}...'")
+                            print(f"  Trying base64 decode: '{base64_decoded[:40]}...'")
                         decoded_result = await tier2.analyze(base64_decoded)
                         if decoded_result.is_threat:
                             result = decoded_result
-                            if self.verbose:
-                                print(f"  Base64 content is THREAT")
             
             elapsed = (time.perf_counter() - start) * 1000
             timing["tier2_ms"] = elapsed
@@ -311,8 +308,7 @@ class AdaptiveDetector:
             confidence = self._calculate_confidence(result)
             
             if self.verbose:
-                print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}")
-                print(f"  Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
+                print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}, Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
             
             total_time = sum(timing.values())
             time_remaining = self.config.max_time_budget_ms - total_time
@@ -363,8 +359,7 @@ class AdaptiveDetector:
             confidence = self._calculate_confidence(result)
             
             if self.verbose:
-                print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}")
-                print(f"  Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
+                print(f"  Result: {'THREAT' if result.is_threat else 'CLEAN'}, Confidence: {confidence:.2f}, Time: {elapsed:.1f}ms")
                 print(f"  → FINAL VERDICT from LLM")
             
             final_result = result
