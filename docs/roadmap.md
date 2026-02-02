@@ -300,27 +300,36 @@ spec:
 
 ## Quick Wins (This Week)
 
-1. **[ ] Simple Python SDK** - `pip install creatine`
+1. **[x] Simple Python SDK** - `from creatine import AdaptiveDetector`
 2. **[ ] FastAPI REST endpoint** - Deploy as service
-3. **[ ] Batch analysis CLI** - `creatine analyze prompts.jsonl`
-4. **[ ] JSON report export** - Machine-readable results
+3. **[x] Batch analysis CLI** - `python creatine.py test dataset`
+4. **[x] JSON report export** - Machine-readable results
 5. **[ ] Docker image** - One-command deployment
 
 ## Medium Term (This Month)
 
 6. **[ ] Streaming proxy** - Protect any LLM API
 7. **[ ] Auto-rule generation** - Learn from production
-8. **[ ] Attack explainability** - Why was this blocked?
+8. **[x] Attack explainability** - Forensics agent explains why blocked
 9. **[ ] Feedback loop** - Mark FP/FN, system learns
 10. **[ ] Basic dashboard** - Streamlit/Gradio UI
 
 ## Ambitious (Quarter)
 
-11. **[ ] Multi-model ensemble** - Consensus voting
+11. **[x] Multi-model ensemble** - Parallel voting via orchestrator
 12. **[ ] Red team mode** - Generate attack variants
 13. **[ ] Threat intel feed** - Community rules
 14. **[ ] SIEM integration** - Enterprise deployment
 15. **[ ] Edge WASM module** - Client-side filtering
+
+## Recently Completed ✅
+
+- **Adaptive Detection**: Tiered escalation with ~85% cost savings
+- **Multi-Agent Orchestration**: Pipeline, ParallelExecutor, ConditionalRouter
+- **Forensics Agent**: Attack technique breakdown with recommendations
+- **Semantic Detection**: BERT-based embedding similarity
+- **LLM Detection**: Azure OpenAI integration with Entra auth
+- **Demo Materials**: Interactive demo, CLI walkthrough, sample prompts
 
 ---
 
