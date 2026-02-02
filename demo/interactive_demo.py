@@ -230,7 +230,7 @@ Escalation: Keywords → Semantics → LLM (only if needed)
         print()
         print_result(result.is_threat, f"(Total: {elapsed:.1f}ms)")
         print(f"  Final tier: {result.details.get('final_tier', 'unknown')}")
-        print(f"  Confidence: {result.risk_score:.1%}")
+        print(f"  Confidence: {result.confidence:.1%}")
         
         pause()
 
