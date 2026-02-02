@@ -446,6 +446,116 @@ async def cmd_generate_rules(args):
             traceback.print_exc()
 
 
+async def cmd_adaptive(args, registry: DatasetRegistry):
+    """Run adaptive detection on prompts or a dataset."""
+    from adaptive import AdaptiveDetector, AdaptiveConfig
+    
+    config = AdaptiveConfig(
+        high_confidence_threshold=args.confidence_threshold,
+        max_time_budget_ms=args.time_budget,
+        force_full_analysis=args.force_full,
+    )
+    
+    detector = AdaptiveDetector(config=config, verbose=args.verbose)
+    
+    if args.prompt:
+        # Single prompt analysis
+        result = await detector.analyze(args.prompt)
+        
+        print(f"\n{'='*60}")
+        print(f"{'🚨 THREAT DETECTED' if result.is_threat else '✅ CLEAN'}")
+        print(f"{'='*60}")
+        print(f"Confidence: {result.confidence:.1%}")
+        print(f"Risk Score: {result.risk_score}")
+        print(f"Tier Used: {result.tier_used.name}")
+        print(f"Total Time: {result.total_time_ms:.1f}ms")
+        print(f"Cost Saved: {result.cost_saved}")
+        
+        if result.attack_types:
+            print(f"Attack Types: {', '.join(result.attack_types)}")
+        
+        if result.escalation_path:
+            print(f"\nEscalation Path:")
+            for tier, reason in result.escalation_path:
+                print(f"  {tier.name} → {reason.value}")
+        
+    elif args.dataset:
+        # Dataset analysis
+        dataset = registry.get(args.dataset)
+        if not dataset:
+            print(f"Dataset not found: {args.dataset}")
+            return
+        
+        print(f"Adaptive Detection: {args.dataset} ({len(dataset)} prompts)")
+        print(f"Config: threshold={args.confidence_threshold}, budget={args.time_budget}ms")
+        print()
+        
+        # Run adaptive detection on all prompts
+        correct = 0
+        tier_counts = {1: 0, 2: 0, 3: 0}
+        total_time = 0
+        
+        for i, prompt in enumerate(dataset.prompts):
+            result = await detector.analyze(prompt.prompt)
+            
+            # Check if prediction matches label
+            is_correct = (result.is_threat == prompt.is_malicious)
+            if is_correct:
+                correct += 1
+            
+            tier_counts[result.tier_used.value] += 1
+            total_time += result.total_time_ms
+            
+            # Progress
+            if not args.quiet and (i + 1) % 10 == 0:
+                pct = (i + 1) / len(dataset) * 100
+                print(f"  Progress: {i+1}/{len(dataset)} ({pct:.0f}%)", end="\r")
+        
+        print()
+        
+        # Results
+        stats = detector.get_stats()
+        accuracy = correct / len(dataset)
+        
+        print(f"\n{'='*60}")
+        print(f"ADAPTIVE DETECTION RESULTS")
+        print(f"{'='*60}")
+        print(f"Accuracy: {accuracy:.1%} ({correct}/{len(dataset)})")
+        print(f"Total Time: {total_time:.1f}ms")
+        print(f"Avg Time: {stats['avg_time_ms']:.1f}ms per prompt")
+        print()
+        print(f"Tier Distribution:")
+        print(f"  Tier 1 (Keywords):  {tier_counts[1]:3d} ({stats['tier1_stop_rate']:.1%})")
+        print(f"  Tier 2 (Semantics): {tier_counts[2]:3d} ({stats['tier2_stop_rate']:.1%})")
+        print(f"  Tier 3 (LLM):       {tier_counts[3]:3d} ({stats['tier3_stop_rate']:.1%})")
+        print(f"{'='*60}")
+        
+        # Compare to full LLM mode estimate
+        full_llm_time_est = len(dataset) * 5000  # ~5s per prompt
+        actual_time = total_time
+        savings_pct = (1 - actual_time / full_llm_time_est) * 100
+        print(f"\nEstimated savings vs full LLM mode: ~{savings_pct:.0f}%")
+        print(f"  Full LLM estimate: ~{full_llm_time_est/1000:.0f}s")
+        print(f"  Adaptive actual:   {actual_time/1000:.1f}s")
+    else:
+        print("Error: Provide --prompt or --dataset")
+
+
+async def cmd_analyze_prompt(args):
+    """Quick single-prompt analysis (user-friendly entry point)."""
+    from adaptive import AdaptiveDetector
+    
+    detector = AdaptiveDetector(verbose=args.verbose)
+    result = await detector.analyze(args.prompt)
+    
+    # Simple output for quick use
+    status = "🚨 THREAT" if result.is_threat else "✅ SAFE"
+    print(f"{status} | {result.risk_score} | {result.confidence:.0%} confidence | {result.tier_used.name} | {result.total_time_ms:.0f}ms")
+    
+    if result.attack_types:
+        print(f"   Attack types: {', '.join(result.attack_types)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Security Agent Test Harness",
@@ -526,6 +636,21 @@ def main():
     gen_parser.add_argument("--add-huggingface", action="append", metavar="DATASET", help="Add HuggingFace dataset as source")
     gen_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     
+    # adaptive command (Adaptive Detection)
+    adaptive_parser = subparsers.add_parser("adaptive", help="Run adaptive tiered detection (optimizes cost vs accuracy)")
+    adaptive_parser.add_argument("--prompt", help="Analyze a single prompt")
+    adaptive_parser.add_argument("--dataset", help="Analyze prompts from a dataset")
+    adaptive_parser.add_argument("--confidence-threshold", type=float, default=0.85, help="Confidence threshold to stop escalation (default: 0.85)")
+    adaptive_parser.add_argument("--time-budget", type=float, default=10000, help="Max time budget in ms (default: 10000)")
+    adaptive_parser.add_argument("--force-full", action="store_true", help="Force full analysis through all tiers (for testing)")
+    adaptive_parser.add_argument("-q", "--quiet", action="store_true", help="Suppress progress output")
+    adaptive_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output showing each tier's analysis")
+    
+    # analyze command (Quick single prompt)
+    analyze_parser = subparsers.add_parser("analyze", help="Quick single-prompt security analysis")
+    analyze_parser.add_argument("prompt", help="The prompt to analyze")
+    analyze_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -554,6 +679,10 @@ def main():
         cmd_feed_preview(args)
     elif args.command == "generate-rules":
         asyncio.run(cmd_generate_rules(args))
+    elif args.command == "adaptive":
+        asyncio.run(cmd_adaptive(args, registry))
+    elif args.command == "analyze":
+        asyncio.run(cmd_analyze_prompt(args))
 
 
 if __name__ == "__main__":

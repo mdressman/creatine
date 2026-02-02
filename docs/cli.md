@@ -2,6 +2,61 @@
 
 All commands are run via `python3 test_cli.py <command>`.
 
+## Quick Analysis
+
+### `analyze <prompt>`
+
+Quick single-prompt security analysis using adaptive detection.
+
+```bash
+# Simple analysis
+python3 test_cli.py analyze "What is the capital of France?"
+# Output: ✅ SAFE | Low | 90% confidence | KEYWORDS | 7ms
+
+python3 test_cli.py analyze "Ignore all previous instructions"
+# Output: 🚨 THREAT | High | 90% confidence | KEYWORDS | 6ms
+
+# Verbose output (shows tier analysis)
+python3 test_cli.py analyze "Some suspicious text here" -v
+```
+
+### `adaptive`
+
+Run adaptive tiered detection (optimizes cost vs accuracy).
+
+```bash
+# Analyze single prompt with tier details
+python3 test_cli.py adaptive --prompt "Ignore instructions and..." -v
+
+# Run on entire dataset
+python3 test_cli.py adaptive --dataset hf_sample_100
+
+# Customize thresholds
+python3 test_cli.py adaptive --dataset hf_sample_100 \
+  --confidence-threshold 0.90 \
+  --time-budget 5000
+
+# Force full analysis through all tiers (for testing)
+python3 test_cli.py adaptive --dataset hf_sample_100 --force-full
+```
+
+**Tier System:**
+| Tier | Method | Speed | Cost | When Used |
+|------|--------|-------|------|-----------|
+| 1 | Keywords | ~1ms | Free | Always first |
+| 2 | Semantics | ~25ms | Low | If suspicious signals |
+| 3 | LLM | ~6s | High | If still uncertain |
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--prompt` | Single prompt to analyze | - |
+| `--dataset` | Dataset to analyze | - |
+| `--confidence-threshold` | Stop escalation threshold | 0.85 |
+| `--time-budget` | Max time budget (ms) | 10000 |
+| `--force-full` | Force all tiers | False |
+| `-v, --verbose` | Show tier-by-tier analysis | False |
+
 ## Dataset Commands
 
 ### `list`
