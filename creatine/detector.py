@@ -155,13 +155,23 @@ class ThreatDetector:
         Returns:
             ThreatAnalysis with risk assessment and attack types detected
         """
+        import concurrent.futures
+        
         matches = []
         attack_types = []
         max_severity = "low"
         
-        for matcher in self._matchers:
-            result = matcher.check_prompt(prompt)
-            
+        # Run all matchers in parallel for better performance with LLM rules
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(m.check_prompt, prompt): m for m in self._matchers}
+            results = []
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    results.append(future.result())
+                except Exception:
+                    pass  # Skip failed rules
+        
+        for result in results:
             if result.get("matched"):
                 meta = result.get("meta", {})
                 severity = meta.get("severity", "medium").lower()
