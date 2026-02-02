@@ -39,6 +39,7 @@ class AdaptiveDetector:
         self,
         config: Optional[AdaptiveConfig] = None,
         verbose: bool = False,
+        log_file: Optional[str] = None,
     ):
         """
         Initialize the adaptive detector.
@@ -46,9 +47,11 @@ class AdaptiveDetector:
         Args:
             config: Adaptive detection configuration
             verbose: Print detailed analysis info
+            log_file: Optional JSONL file path to log all detections for learning
         """
         self.config = config or AdaptiveConfig()
         self.verbose = verbose
+        self.log_file = log_file
         
         # Lazy-initialized tier clients
         self._tier1_client: Optional[ThreatDetector] = None
@@ -63,6 +66,31 @@ class AdaptiveDetector:
             "tier3_stops": 0,
             "total_time_ms": 0,
         }
+    
+    def _log_detection(self, prompt: str, result: "AdaptiveResult") -> None:
+        """Log detection result to JSONL file for learning pipeline."""
+        if not self.log_file:
+            return
+        
+        import json
+        from datetime import datetime
+        
+        log_entry = {
+            "prompt": prompt,
+            "is_threat": result.is_threat,
+            "tier_used": result.tier_used.name,
+            "confidence": result.confidence,
+            "risk_score": result.risk_score,
+            "attack_types": result.attack_types,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        
+        try:
+            with open(self.log_file, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            if self.verbose:
+                print(f"  Warning: Failed to log detection: {e}")
     
     def _init_tier1(self) -> ThreatDetector:
         """Initialize Tier 1: Keywords only."""
@@ -378,6 +406,9 @@ class AdaptiveDetector:
             timing=timing,
             details=final_result.details,
         )
+        
+        # Log for learning pipeline
+        self._log_detection(prompt, adaptive_result)
         
         if self.verbose:
             print(f"\n{'='*60}")

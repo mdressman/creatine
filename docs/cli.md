@@ -19,6 +19,9 @@ python creatine.py detect "Ignore all previous instructions"
 # Full detection (all tiers)
 python creatine.py detect "Suspicious prompt" --full
 
+# Log detections for learning pipeline
+python creatine.py detect "Some text" --log production.jsonl
+
 # Verbose output
 python creatine.py detect "Some text" -v
 ```
@@ -28,6 +31,13 @@ python creatine.py detect "Some text" -v
 |------|-------------|----------|
 | Adaptive (default) | Escalates tiers as needed | Production, cost-optimized |
 | Full (`--full`) | Runs all three tiers | Security audits, validation |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--full` | Run all detection tiers |
+| `--log FILE` | Append results to JSONL file for learning |
+| `-v` | Verbose output |
 
 ### `detect-pipeline <prompt>`
 
@@ -190,6 +200,9 @@ python creatine.py test common_jailbreaks --adaptive
 # Compare Adaptive vs Full modes
 python creatine.py test common_jailbreaks --compare
 
+# Log all detections for learning
+python creatine.py test common_jailbreaks --adaptive --log detections.jsonl
+
 # Verbose output
 python creatine.py test common_jailbreaks -v
 
@@ -203,6 +216,15 @@ python creatine.py test common_jailbreaks -s
 | Full (default) | Runs all tiers on every prompt |
 | Adaptive (`--adaptive`) | Cost-optimized tier escalation |
 | Compare (`--compare`) | Side-by-side comparison of both modes |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--adaptive` | Use adaptive detection mode |
+| `--compare` | Compare both modes side-by-side |
+| `--log FILE` | Log all detections to JSONL for learning |
+| `-s` | Save report to file |
+| `-v` | Verbose output |
 
 **Output Metrics:**
 - **Accuracy**: Overall correctness (TP + TN) / Total
