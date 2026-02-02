@@ -1,4 +1,4 @@
-"""Dataset management for security agent testing.
+"""Dataset management for security testing.
 
 Supports loading, processing, and iterating over prompt injection and jailbreak datasets
 from various sources including HuggingFace, local files, and custom collections.
@@ -7,8 +7,8 @@ from various sources including HuggingFace, local files, and custom collections.
 import json
 import csv
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
-from typing import Iterator, Optional
+from dataclasses import dataclass, field
+from typing import Iterator, Optional, List, Dict, Any
 from enum import Enum
 
 
@@ -43,10 +43,10 @@ class TestPrompt:
     source: str = ""
     description: str = ""
     expected_blocked: bool = True
-    tags: list[str] = field(default_factory=list)
-    metadata: dict = field(default_factory=dict)
+    tags: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "prompt": self.prompt,
@@ -61,7 +61,7 @@ class TestPrompt:
         }
     
     @classmethod
-    def from_dict(cls, data: dict) -> "TestPrompt":
+    def from_dict(cls, data: Dict[str, Any]) -> "TestPrompt":
         """Create from dictionary."""
         return cls(
             prompt=data["prompt"],
@@ -81,7 +81,7 @@ class Dataset:
     """A collection of test prompts."""
     name: str
     description: str
-    prompts: list[TestPrompt] = field(default_factory=list)
+    prompts: List[TestPrompt] = field(default_factory=list)
     version: str = "1.0"
     source_url: str = ""
     
@@ -91,19 +91,19 @@ class Dataset:
     def __iter__(self) -> Iterator[TestPrompt]:
         return iter(self.prompts)
     
-    def filter_by_type(self, attack_type: AttackType) -> list[TestPrompt]:
+    def filter_by_type(self, attack_type: AttackType) -> List[TestPrompt]:
         """Filter prompts by attack type."""
         return [p for p in self.prompts if p.attack_type == attack_type]
     
-    def filter_by_severity(self, severity: Severity) -> list[TestPrompt]:
+    def filter_by_severity(self, severity: Severity) -> List[TestPrompt]:
         """Filter prompts by severity."""
         return [p for p in self.prompts if p.severity == severity]
     
-    def filter_malicious(self, malicious: bool = True) -> list[TestPrompt]:
+    def filter_malicious(self, malicious: bool = True) -> List[TestPrompt]:
         """Filter by malicious/benign."""
         return [p for p in self.prompts if p.is_malicious == malicious]
     
-    def sample(self, n: int) -> list[TestPrompt]:
+    def sample(self, n: int) -> List[TestPrompt]:
         """Get a random sample of prompts."""
         import random
         return random.sample(self.prompts, min(n, len(self.prompts)))
@@ -135,10 +135,10 @@ class Dataset:
 class DatasetRegistry:
     """Registry for managing multiple datasets."""
     
-    def __init__(self, datasets_dir: Path = None):
-        self.datasets_dir = datasets_dir or Path(__file__).parent / "datasets"
+    def __init__(self, datasets_dir: Optional[Path] = None):
+        self.datasets_dir = datasets_dir or Path(__file__).parent.parent / "datasets"
         self.datasets_dir.mkdir(exist_ok=True)
-        self._datasets: dict[str, Dataset] = {}
+        self._datasets: Dict[str, Dataset] = {}
     
     def register(self, dataset: Dataset) -> None:
         """Register a dataset."""
@@ -148,7 +148,6 @@ class DatasetRegistry:
         """Get a dataset by name."""
         if name in self._datasets:
             return self._datasets[name]
-        # Try loading from file
         path = self.datasets_dir / f"{name}.json"
         if path.exists():
             dataset = Dataset.load(path)
@@ -156,9 +155,8 @@ class DatasetRegistry:
             return dataset
         return None
     
-    def list_datasets(self) -> list[str]:
+    def list_datasets(self) -> List[str]:
         """List all available datasets."""
-        # Combine registered and file-based datasets
         file_datasets = {p.stem for p in self.datasets_dir.glob("*.json")}
         return sorted(set(self._datasets.keys()) | file_datasets)
     
@@ -174,7 +172,7 @@ class DatasetRegistry:
             if path.stem not in self._datasets:
                 self._datasets[path.stem] = Dataset.load(path)
     
-    def get_combined(self, names: list[str] = None) -> Dataset:
+    def get_combined(self, names: Optional[List[str]] = None) -> Dataset:
         """Combine multiple datasets into one."""
         if names is None:
             names = self.list_datasets()
@@ -213,7 +211,12 @@ def load_from_csv(path: Path, prompt_col: str = "prompt", label_col: str = "labe
     )
 
 
-def load_from_huggingface(dataset_name: str, split: str = "train", prompt_field: str = "prompt", label_field: str = "label") -> Dataset:
+def load_from_huggingface(
+    dataset_name: str, 
+    split: str = "train", 
+    prompt_field: str = "prompt", 
+    label_field: str = "label"
+) -> Dataset:
     """Load a dataset from HuggingFace."""
     try:
         from datasets import load_dataset
@@ -227,7 +230,6 @@ def load_from_huggingface(dataset_name: str, split: str = "train", prompt_field:
         prompt_text = item.get(prompt_field) or item.get("text") or item.get("content", "")
         label = item.get(label_field)
         
-        # Determine if malicious based on label
         is_malicious = True
         if label is not None:
             if isinstance(label, (int, float)):

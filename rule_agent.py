@@ -11,18 +11,18 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict, Any
 
 from dotenv import load_dotenv
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
-from dataset import Dataset, DatasetRegistry, TestPrompt, AttackType
-from promptintel import (
-    PromptIntelFeedClient, IoPC, FEED_RULES_PATH, DEFAULT_RULES_PATH,
-    PromptIntelClient
-)
-from test_harness import TestHarness, TestReport
+from testing import Dataset, DatasetRegistry, TestPrompt, AttackType, TestHarness, TestReport
+from creatine import ThreatDetector, PromptIntelFeedClient, IoPC
+from creatine.detector import FEED_RULES_PATH, DEFAULT_RULES_PATH
+
+# Backward compatibility alias
+PromptIntelClient = ThreatDetector
 
 load_dotenv()
 
@@ -243,7 +243,7 @@ class RuleGenerationAgent:
     
     async def _fetch_huggingface(self, source: DataSource) -> list[IoPC]:
         """Fetch from HuggingFace dataset."""
-        from dataset import load_from_huggingface
+        from testing import load_from_huggingface
         
         dataset = load_from_huggingface(
             source.config["dataset"],

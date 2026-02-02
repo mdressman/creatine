@@ -1,4 +1,7 @@
-"""CLI for managing datasets and running security tests."""
+"""CLI for managing datasets and running security tests.
+
+NOTE: This is the legacy CLI. For new projects, use `python creatine_cli.py` instead.
+"""
 
 import asyncio
 import argparse
@@ -7,12 +10,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from dataset import (
+from testing import (
     Dataset, DatasetRegistry, TestPrompt, AttackType, Severity,
-    load_from_csv, load_from_huggingface
+    load_from_csv, load_from_huggingface,
+    TestHarness, print_progress
 )
-from test_harness import TestHarness, print_progress
-from promptintel import PromptIntelClient, PromptIntelFeedClient, FEED_RULES_PATH
+from creatine import ThreatDetector, PromptIntelFeedClient
+from creatine.detector import FEED_RULES_PATH
+
+# Backward compatibility aliases
+PromptIntelClient = ThreatDetector
 
 load_dotenv()
 
@@ -448,7 +455,7 @@ async def cmd_generate_rules(args):
 
 async def cmd_adaptive(args, registry: DatasetRegistry):
     """Run adaptive detection on prompts or a dataset."""
-    from adaptive import AdaptiveDetector, AdaptiveConfig
+    from creatine import AdaptiveDetector, AdaptiveConfig
     
     config = AdaptiveConfig(
         high_confidence_threshold=args.confidence_threshold,
@@ -543,7 +550,7 @@ async def cmd_adaptive(args, registry: DatasetRegistry):
 
 async def cmd_analyze_prompt(args):
     """Quick single-prompt analysis (user-friendly entry point)."""
-    from adaptive import AdaptiveDetector
+    from creatine import AdaptiveDetector
     
     detector = AdaptiveDetector(verbose=args.verbose)
     result = await detector.analyze(args.prompt)

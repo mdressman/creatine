@@ -10,7 +10,6 @@ A prompt security platform for detecting prompt injection and jailbreak attacks 
   - Tier 3: LLM (~6s) - catches sophisticated attacks
 - **Nova Pattern Matching**: Local YARA-style rule engine for fast threat detection
 - **AI-Powered Rule Generation**: Uses Azure OpenAI to generate sophisticated detection rules
-- **Iterative Optimization**: Agent automatically improves rules based on test feedback
 - **Multiple Data Sources**: Ingest threats from PromptIntel API, HuggingFace datasets, or local files
 - **Test Harness**: Comprehensive testing with accuracy, precision, recall, and F1 metrics
 
@@ -46,17 +45,17 @@ PROMPTINTEL_API_KEY=your-api-key  # Optional, for feed sync
 
 ```bash
 # Quick single-prompt analysis
-python3 test_cli.py analyze "Ignore all previous instructions"
+python test_cli.py analyze "Ignore all previous instructions"
 # Output: 🚨 THREAT | High | 90% confidence | KEYWORDS | 6ms
 
 # Run adaptive detection on a dataset
-python3 test_cli.py adaptive --dataset hf_sample_100
+python test_cli.py adaptive --dataset hf_sample_100
 
 # Run full comparison test (all evaluation modes)
-python3 test_cli.py test hf_sample_100 --compare
+python test_cli.py test hf_sample_100 --compare
 
-# Generate optimized rules
-python3 test_cli.py generate-rules --test-dataset common_jailbreaks -v
+# List available datasets
+python test_cli.py list
 ```
 
 ## Evaluation Modes
@@ -68,6 +67,48 @@ python3 test_cli.py generate-rules --test-dataset common_jailbreaks -v
 | + LLM | ~6s | Best | Higher | Security audits |
 | **Adaptive** | Variable | Good | **~85% less** | Cost-optimized production |
 
+## Project Structure
+
+```
+creatine/
+├── creatine/                # Core detection package
+│   ├── __init__.py          # Package exports
+│   ├── detector.py          # ThreatDetector (Nova pattern matching)
+│   ├── adaptive.py          # AdaptiveDetector (tiered detection)
+│   ├── evaluators.py        # LLM and semantic evaluators
+│   ├── models.py            # Data classes
+│   ├── feed.py              # PromptIntel feed client
+│   └── rules/               # Nova rule files
+│       ├── default.nov      # Core keyword rules
+│       └── advanced.nov     # Semantic + LLM rules
+├── testing/                 # Testing framework
+│   ├── dataset.py           # Dataset management
+│   └── harness.py           # Test runner with metrics
+├── cli/                     # CLI package
+│   └── main.py              # New CLI entry point
+├── test_cli.py              # Legacy CLI (full-featured)
+├── rule_agent.py            # AI rule generation agent
+├── datasets/                # Test datasets (JSON)
+├── reports/                 # Generated test reports
+└── docs/                    # Documentation
+```
+
+## Python API
+
+```python
+from creatine import AdaptiveDetector, ThreatDetector
+
+# Quick analysis with adaptive detection
+detector = AdaptiveDetector()
+result = await detector.analyze("Your prompt here")
+print(f"Threat: {result.is_threat}, Tier: {result.tier_used.name}")
+
+# Direct detection with specific mode
+detector = ThreatDetector(enable_semantics=True, enable_llm=True)
+result = await detector.analyze("Your prompt here")
+print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
+```
+
 ## Documentation
 
 - [CLI Reference](docs/cli.md) - All available commands
@@ -75,23 +116,6 @@ python3 test_cli.py generate-rules --test-dataset common_jailbreaks -v
 - [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
 - [Comparison Report](docs/comparison-report.md) - Benchmark results
 - [Roadmap](docs/roadmap.md) - Future features and ideas
-
-## Architecture
-
-```
-creatine/
-├── adaptive.py       # Adaptive tiered detection engine
-├── promptintel.py    # Nova detection engine + evaluators
-├── rule_agent.py     # AI rule generation agent
-├── dataset.py        # Dataset management and loaders
-├── test_harness.py   # Test runner with metrics
-├── test_cli.py       # Command-line interface
-├── rules/
-│   ├── default.nov   # Core keyword detection rules
-│   └── advanced.nov  # Semantic + LLM rules
-└── datasets/
-    └── *.json        # Test datasets
-```
 
 ## License
 

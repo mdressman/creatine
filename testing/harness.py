@@ -1,7 +1,6 @@
-"""Test harness for security agent evaluation.
+"""Test harness for security evaluation.
 
-Runs test datasets through the security agent and PromptIntel API,
-collecting results and generating reports.
+Runs test datasets through detectors and generates reports with metrics.
 """
 
 import asyncio
@@ -10,10 +9,9 @@ import time
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any, Callable
 
-from dataset import Dataset, TestPrompt, DatasetRegistry, AttackType, Severity
-from promptintel import PromptIntelClient, ThreatAnalysis
+from .dataset import Dataset, TestPrompt, DatasetRegistry
 
 
 @dataclass
@@ -22,13 +20,13 @@ class TestResult:
     prompt: TestPrompt
     detected_as_threat: bool
     risk_score: str
-    attack_types_detected: list[str]
+    attack_types_detected: List[str]
     response_time_ms: float
-    correct: bool  # Did detection match expected?
+    correct: bool
     error: Optional[str] = None
-    raw_response: dict = field(default_factory=dict)
+    raw_response: Dict[str, Any] = field(default_factory=dict)
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "prompt": self.prompt.prompt[:100] + "..." if len(self.prompt.prompt) > 100 else self.prompt.prompt,
             "expected_malicious": self.prompt.is_malicious,
@@ -46,13 +44,13 @@ class TestReport:
     """Aggregated results from a test run."""
     dataset_name: str
     total_prompts: int
-    true_positives: int = 0  # Malicious detected as threat
-    true_negatives: int = 0  # Benign detected as safe
-    false_positives: int = 0  # Benign detected as threat
-    false_negatives: int = 0  # Malicious detected as safe
+    true_positives: int = 0
+    true_negatives: int = 0
+    false_positives: int = 0
+    false_negatives: int = 0
     errors: int = 0
     avg_response_time_ms: float = 0.0
-    results: list[TestResult] = field(default_factory=list)
+    results: List[TestResult] = field(default_factory=list)
     started_at: str = ""
     completed_at: str = ""
     
@@ -102,7 +100,7 @@ Confusion Matrix:
 Avg Response Time: {self.avg_response_time_ms:.2f}ms
 """
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "dataset_name": self.dataset_name,
             "total_prompts": self.total_prompts,
@@ -135,30 +133,29 @@ class TestHarness:
     
     def __init__(
         self,
-        promptintel_client: PromptIntelClient,
-        registry: DatasetRegistry = None,
-        reports_dir: Path = None,
+        detector,  # ThreatDetector or compatible
+        registry: Optional[DatasetRegistry] = None,
+        reports_dir: Optional[Path] = None,
     ):
-        self.client = promptintel_client
+        self.detector = detector
         self.registry = registry or DatasetRegistry()
-        self.reports_dir = reports_dir or Path(__file__).parent / "reports"
+        self.reports_dir = reports_dir or Path(__file__).parent.parent / "reports"
         self.reports_dir.mkdir(exist_ok=True)
     
     async def test_prompt(self, prompt: TestPrompt, verbose: bool = False) -> TestResult:
-        """Test a single prompt against the security API."""
+        """Test a single prompt against the detector."""
         start_time = time.time()
         
         try:
-            analysis = await self.client.analyze_prompt(prompt.prompt)
+            analysis = await self.detector.analyze(prompt.prompt)
             response_time = (time.time() - start_time) * 1000
             
             detected = analysis.is_threat
             
-            # Determine correctness
             if prompt.is_malicious:
-                correct = detected  # Should be detected
+                correct = detected
             else:
-                correct = not detected  # Should not be detected
+                correct = not detected
             
             if verbose:
                 status = "✓" if correct else "✗"
@@ -167,8 +164,6 @@ class TestHarness:
                 print(f"  Detected: {'threat' if detected else 'safe'} (risk: {analysis.risk_score})")
                 if analysis.attack_types:
                     print(f"  Attack types: {', '.join(analysis.attack_types)}")
-                if analysis.details:
-                    print(f"  API response: {json.dumps(analysis.details, indent=4)}")
             
             return TestResult(
                 prompt=prompt,
@@ -197,7 +192,7 @@ class TestHarness:
         self,
         dataset: Dataset,
         concurrency: int = 5,
-        progress_callback=None,
+        progress_callback: Optional[Callable] = None,
         verbose: bool = False,
     ) -> TestReport:
         """Run tests on an entire dataset."""
@@ -219,7 +214,6 @@ class TestHarness:
         tasks = [test_with_limit(p, i) for i, p in enumerate(dataset.prompts)]
         results = await asyncio.gather(*tasks)
         
-        # Aggregate results
         total_time = 0.0
         for result in results:
             report.results.append(result)
@@ -250,7 +244,7 @@ class TestHarness:
             raise ValueError(f"Dataset not found: {dataset_name}")
         return await self.run_dataset(dataset, **kwargs)
     
-    async def run_all(self, **kwargs) -> dict[str, TestReport]:
+    async def run_all(self, **kwargs) -> Dict[str, TestReport]:
         """Run tests on all registered datasets."""
         reports = {}
         for name in self.registry.list_datasets():
@@ -273,17 +267,3 @@ def print_progress(current: int, total: int, result: TestResult):
     if result.error:
         status = "!"
     print(f"  [{current}/{total}] {status} {result.risk_score}", end="\r")
-
-
-async def quick_test(client: PromptIntelClient, prompts: list[str]) -> None:
-    """Quick test a list of prompts."""
-    harness = TestHarness(client)
-    
-    dataset = Dataset(
-        name="quick_test",
-        description="Ad-hoc test prompts",
-        prompts=[TestPrompt(prompt=p, is_malicious=True) for p in prompts],
-    )
-    
-    report = await harness.run_dataset(dataset, progress_callback=print_progress)
-    print("\n" + report.summary())
