@@ -426,6 +426,37 @@ def cmd_sync_feed(args):
         print(f"Error: {e}")
 
 
+def cmd_forensics(args):
+    """Run forensic analysis on a prompt."""
+    from agents import ForensicsAgent
+    
+    async def run():
+        agent = ForensicsAgent(verbose=args.verbose)
+        
+        if args.full:
+            # Run detection + forensics
+            report = await agent.analyze_with_detection(args.prompt)
+        else:
+            # Just forensics
+            report = await agent.analyze(args.prompt)
+        
+        print(report.summary())
+        
+        if args.json:
+            import json
+            print(f"\n{'='*60}")
+            print("Raw Analysis (JSON):")
+            print(json.dumps(report.raw_analysis, indent=2))
+    
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        print(f"Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -507,6 +538,13 @@ def main():
     p.add_argument("--smart", action="store_true", help="Use AI for rule generation")
     p.add_argument("-v", "--verbose", action="store_true")
     
+    # forensics
+    p = subparsers.add_parser("forensics", help="Deep forensic analysis of a prompt")
+    p.add_argument("prompt", help="Prompt to analyze")
+    p.add_argument("--full", action="store_true", help="Run detection first, then forensics")
+    p.add_argument("--json", action="store_true", help="Output raw JSON analysis")
+    p.add_argument("-v", "--verbose", action="store_true")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -524,6 +562,7 @@ def main():
         "import-csv": cmd_import_csv,
         "generate-rules": cmd_generate_rules,
         "sync-feed": cmd_sync_feed,
+        "forensics": cmd_forensics,
     }
     
     cmd_func = commands.get(args.command)
