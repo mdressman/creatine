@@ -320,7 +320,7 @@ def cmd_sync_feed(args):
     try:
         if args.smart:
             # Use Rule Generation Agent for AI-powered rule generation
-            from rule_agent import RuleGenerationAgent
+            from agents import RuleGenerationAgent
             
             print("Using AI-powered rule generation (requires Azure OpenAI)...")
             agent = RuleGenerationAgent(verbose=args.verbose)
@@ -345,7 +345,7 @@ def cmd_sync_feed(args):
                 print("Error: Rule generation failed")
         else:
             # Use simple keyword extraction (no AI)
-            from rule_agent import generate_simple_rules
+            from agents import generate_simple_rules
             
             if args.verbose:
                 print("Fetching IoPC feed from PromptIntel...")
@@ -420,7 +420,7 @@ def cmd_feed_preview(args):
 
 async def cmd_generate_rules(args):
     """Run the Rule Generation Agent to create optimized Nova rules."""
-    from rule_agent import RuleGenerationAgent
+    from agents import RuleGenerationAgent
     
     try:
         agent = RuleGenerationAgent(verbose=args.verbose)
