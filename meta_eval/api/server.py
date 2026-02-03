@@ -15,6 +15,7 @@ Uses FastAPI for async support and automatic OpenAPI documentation.
 import asyncio
 import os
 import time
+import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
@@ -241,8 +242,11 @@ class MetaEvalAPI:
             Returns the agent ID.
             """
             try:
+                # Generate ID if not provided
+                agent_id = config.id or str(uuid.uuid4())[:8]
+                
                 agent = AgentConfig(
-                    id=config.id,
+                    id=agent_id,
                     name=config.name,
                     model=config.model,
                     persona=AgentPersona(config.persona),
@@ -254,7 +258,7 @@ class MetaEvalAPI:
                     enabled=config.enabled,
                 )
                 
-                agent_id = self.agent_manager.register_agent(agent)
+                self.agent_manager.register_agent(agent)
                 
                 return {"status": "success", "agent_id": agent_id}
                 

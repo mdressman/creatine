@@ -5,6 +5,9 @@ from unittest.mock import Mock, patch, AsyncMock
 
 from meta_eval.api.server import MetaEvalAPI, create_api
 from meta_eval.schemas import AgentPersona, EvaluationResult, AgentVote, AgentRole
+from meta_eval.agents.manager import AgentManager
+from meta_eval.debate.debate_engine import DebateEngine
+from meta_eval.consistency.checker import ConsistencyChecker
 
 
 class TestHealthEndpoint:
@@ -30,6 +33,9 @@ class TestAgentsEndpoints:
     def test_list_agents(self):
         """Test listing agents."""
         api = MetaEvalAPI(verbose=False)
+        # Manually init components since TestClient doesn't trigger lifespan by default
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
         client = TestClient(api.app)
         
         response = client.get("/agents")
@@ -45,6 +51,8 @@ class TestAgentsEndpoints:
     def test_add_agent(self):
         """Test adding a new agent."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
         client = TestClient(api.app)
         
         agent_config = {
@@ -84,6 +92,8 @@ class TestAgentsEndpoints:
     def test_delete_agent(self):
         """Test removing an agent."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
         client = TestClient(api.app)
         
         # First add an agent
@@ -105,6 +115,8 @@ class TestAgentsEndpoints:
     def test_delete_nonexistent_agent(self):
         """Test deleting nonexistent agent returns 404."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
         client = TestClient(api.app)
         
         response = client.delete("/agents/nonexistent_id")
@@ -152,6 +164,9 @@ class TestEvaluateEndpoint:
     def test_evaluate_minimal_request(self):
         """Test evaluation with minimal valid request."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
+        api.consistency_checker = ConsistencyChecker(api.agent_manager, api.debate_engine, verbose=False)
         client = TestClient(api.app)
         
         # Mock the debate engine to avoid actual LLM calls
@@ -192,6 +207,9 @@ class TestEvaluateEndpoint:
     def test_evaluate_with_protocol(self):
         """Test evaluation with specific protocol."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
+        api.consistency_checker = ConsistencyChecker(api.agent_manager, api.debate_engine, verbose=False)
         client = TestClient(api.app)
         
         mock_result = EvaluationResult(
@@ -221,6 +239,9 @@ class TestConsistencyEndpoint:
     def test_consistency_check(self):
         """Test consistency check endpoint."""
         api = MetaEvalAPI(verbose=False)
+        api.agent_manager = AgentManager(verbose=False)
+        api.debate_engine = DebateEngine(api.agent_manager, verbose=False)
+        api.consistency_checker = ConsistencyChecker(api.agent_manager, api.debate_engine, verbose=False)
         client = TestClient(api.app)
         
         # Mock consistency checker

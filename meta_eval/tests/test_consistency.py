@@ -3,6 +3,9 @@ import pytest
 import asyncio
 from unittest.mock import Mock, patch
 
+# Configure pytest-asyncio
+pytest_plugins = ('pytest_asyncio',)
+
 from meta_eval.schemas import (
     AgentConfig, AgentPersona, AgentVote, CandidateOutput
 )
@@ -30,9 +33,14 @@ class TestIPIMetric:
     
     def test_ipi_zero_when_consistent(self, checker, manager):
         """IPI should be 0 when agents are perfectly consistent."""
-        # Mock consistent evaluations (same winner regardless of order)
+        # Mock consistent evaluations - agent always prefers the original A regardless of position
+        # When A first (ab order): winner='a' means A wins
+        # When B first (ba order): winner='b' means the second item (A) wins
         async def mock_evaluate_pair(agent, prompt, a, b, order):
-            return {"winner": "a", "score_a": 0.8, "score_b": 0.4, "rationale": "A is better"}
+            if order == 'ab':
+                return {"winner": "a", "score_a": 0.8, "score_b": 0.4, "rationale": "A is better"}
+            else:  # ba order - A is now second
+                return {"winner": "b", "score_a": 0.4, "score_b": 0.8, "rationale": "Second (A) is better"}
         
         with patch.object(checker, '_evaluate_pair', side_effect=mock_evaluate_pair):
             ipi, violations = asyncio.get_event_loop().run_until_complete(
@@ -48,10 +56,14 @@ class TestIPIMetric:
         
         async def mock_evaluate_pair(agent, prompt, a, b, order):
             call_count[0] += 1
-            # Flip winner based on order for some agents
+            # agent_0 is inconsistent - always picks 'a' (first item) regardless of order
             if agent.id == "agent_0":
-                return {"winner": "a" if order == "ab" else "b", "score_a": 0.6, "score_b": 0.5}
-            return {"winner": "a", "score_a": 0.8, "score_b": 0.4}
+                return {"winner": "a", "score_a": 0.6, "score_b": 0.5}
+            # Other agents are consistent - prefer original A
+            if order == 'ab':
+                return {"winner": "a", "score_a": 0.8, "score_b": 0.4}
+            else:
+                return {"winner": "b", "score_a": 0.4, "score_b": 0.8}
         
         with patch.object(checker, '_evaluate_pair', side_effect=mock_evaluate_pair):
             ipi, violations = asyncio.get_event_loop().run_until_complete(
@@ -64,8 +76,8 @@ class TestIPIMetric:
     def test_ipi_all_flip(self, checker, manager):
         """IPI should be 1.0 when all agents flip."""
         async def mock_evaluate_pair(agent, prompt, a, b, order):
-            # All agents flip
-            return {"winner": "a" if order == "ab" else "b", "score_a": 0.6, "score_b": 0.5}
+            # All agents are inconsistent - always pick first item regardless of order
+            return {"winner": "a", "score_a": 0.6, "score_b": 0.5}
         
         with patch.object(checker, '_evaluate_pair', side_effect=mock_evaluate_pair):
             ipi, violations = asyncio.get_event_loop().run_until_complete(
