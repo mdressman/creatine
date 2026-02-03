@@ -324,11 +324,12 @@ spec:
 
 ## Recently Completed ✅
 
-- **Multi-Agent Meta-Evaluation**: MoE architecture with LLM-as-judge
+- **Multi-Agent Meta-Evaluation**: Extracted to standalone package [meta-eval](https://github.com/mdressman/meta-eval)
   - 5 debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
   - IPI/TOV consistency metrics for evaluation reliability
   - RL-based weight tuning, Bayesian hyperparameter optimization
   - REST API for evaluation, metrics, and agent management
+  - SecurityResearcher domain expert with MITRE ATT&CK alignment
 - **Comprehensive Obfuscation Detection**: 9 decoding techniques
   - ROT13, Base64, Hex, URL, spacing, reversed, zero-width, HTML, Morse
   - Uses langdetect for meaningful text detection

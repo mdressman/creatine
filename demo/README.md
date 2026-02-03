@@ -14,11 +14,6 @@ source venv/bin/activate
 python demo/interactive_demo.py          # Interactive menu
 python demo/interactive_demo.py --quick  # Quick 2-minute demo
 python demo/interactive_demo.py --full   # Full demo
-
-# Meta-Evaluation Demo (NEW)
-python demo/meta_eval_demo.py            # Multi-agent evaluation framework
-python demo/meta_eval_demo.py --quick    # Quick overview
-python demo/meta_eval_demo.py --full     # Full with LLM calls
 ```
 
 ## Demo Sections
@@ -33,16 +28,6 @@ python demo/meta_eval_demo.py --full     # Full with LLM calls
 | 4 | Forensics Analysis | 3 min | Attack technique breakdown |
 | 5 | CLI Commands | 2 min | Full CLI reference |
 | 6 | Python API | 2 min | Integration examples |
-
-### Meta-Evaluation Demo (`meta_eval_demo.py`)
-
-| Section | Description |
-|---------|-------------|
-| Agent Management | Expert judge personas, weights, roles |
-| Debate Protocols | ChatEval, CourtEval, DEBATE, MoA, Consensus |
-| Consistency Metrics | IPI (flip detection), TOV (transitivity) |
-| Aggregation Methods | Majority vote, weighted score, unanimous, synthesis |
-| REST API | Endpoints for evaluation and metrics |
 
 ## Key Talking Points
 

@@ -10,12 +10,6 @@
   - Tier 3: LLM (~6s) - Azure OpenAI catches sophisticated attacks
   - **~85% cost savings** compared to always running full analysis
 
-- **Multi-Agent Meta-Evaluation** *(NEW)*: MoE architecture with LLM-as-judge
-  - Multiple debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
-  - Consistency metrics (IPI, TOV) for evaluation reliability
-  - RL-based weight tuning and Bayesian hyperparameter optimization
-  - REST API for evaluation, metrics, and agent management
-
 - **Self-Improving Detection**: Automatically logs all detections and learns from gaps
   - Identifies attacks caught by LLM but missed by keywords
   - Clusters similar attack patterns using embeddings
@@ -39,6 +33,13 @@
   - Import datasets from HuggingFace, CSV, or PromptIntel feeds
   - Comprehensive testing with precision, recall, and F1 metrics
   - Jupyter notebook integration for Kusto/Azure Data Explorer
+
+## Related: Meta-Eval
+
+For high-stakes decisions requiring multi-agent LLM-as-judge evaluation, see the companion project **[meta-eval](https://github.com/mdressman/meta-eval)**:
+- Multi-agent debate protocols (ChatEval, CourtEval, DEBATE)
+- Consistency metrics (IPI, TOV) for evaluation reliability
+- Can be integrated as Tier 3+ for maximum confidence
 
 ## Demo
 

@@ -28,16 +28,17 @@ This guide explains the different detection and evaluation modes in Creatine and
 │  │   orchestrator.py: Multi-agent pipelines, parallel execution        │   │
 │  │   forensics.py: Deep attack breakdown, MITRE ATT&CK mapping         │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
-│                                    │                                        │
-│                                    ▼                                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                meta_eval/ (Multi-Agent Judge Panel)                  │   │
-│  │                                                                      │   │
-│  │   DebateEngine: MoE consensus with 5 debate protocols               │   │
-│  │   ConsistencyChecker: IPI/TOV reliability metrics                   │   │
-│  │   Domain Experts: SecurityResearcher, custom specialists            │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ (optional integration)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              meta-eval (External Package - Multi-Agent Judge Panel)         │
+│              https://github.com/mdressman/meta-eval                         │
+│                                                                             │
+│   DebateEngine: MoE consensus with 5 debate protocols                       │
+│   ConsistencyChecker: IPI/TOV reliability metrics                           │
+│   Domain Experts: SecurityResearcher, custom specialists                    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -113,9 +114,11 @@ result = await pipeline.execute(prompt)
 
 ---
 
-### 4. Meta-Eval Framework (Judge Panel)
+### 4. Meta-Eval Framework (External Package)
 
 **Use for:** High-stakes decisions requiring calibrated confidence
+
+Install separately: `pip install meta-eval` (see [github.com/mdressman/meta-eval](https://github.com/mdressman/meta-eval))
 
 ```python
 from meta_eval import AgentManager, DebateEngine, EvaluationRequest, CandidateOutput
@@ -147,16 +150,18 @@ result = await engine.evaluate(request)
 | **AdaptiveDetector** | Fast threat detection | ~1ms-6s | Production API protection |
 | **Orchestrator** | Workflow coordination | Variable | Complex pipelines |
 | **Forensics** | Attack breakdown | ~5-10s | Incident analysis |
-| **Meta-Eval** | Calibrated judgment | ~10-30s | High-stakes decisions |
+| **Meta-Eval** (external) | Calibrated judgment | ~10-30s | High-stakes decisions |
 
 ### Integration Pattern
 
-For maximum accuracy on critical prompts:
+For maximum accuracy on critical prompts (requires `pip install meta-eval`):
 
 ```python
 from creatine import AdaptiveDetector
 from agents.forensics import ForensicsAgent
-from meta_eval import AgentManager, DebateEngine, SECURITY_RESEARCHER_AGENT
+
+# Optional: pip install meta-eval
+from meta_eval import AgentManager, DebateEngine, SECURITY_RESEARCHER_AGENT, EvaluationRequest, CandidateOutput
 
 # Stage 1: Fast detection
 detector = AdaptiveDetector()
