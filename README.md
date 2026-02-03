@@ -25,10 +25,21 @@
   - Provides severity assessment and risk scoring
   - Generates actionable recommendations
 
+- **Comprehensive Obfuscation Detection**: 9 decoding techniques
+  - ROT13, Base64, Hex, URL encoding, Character spacing
+  - Reversed text, Zero-width chars, HTML entities, Morse/Binary
+
 - **Production Ready**: Clean CLI, Python API, and batch processing
   - Import datasets from HuggingFace, CSV, or PromptIntel feeds
   - Comprehensive testing with precision, recall, and F1 metrics
   - Jupyter notebook integration for Kusto/Azure Data Explorer
+
+## Related: Tribunal
+
+For high-stakes decisions requiring multi-agent LLM-as-judge evaluation, see the companion project **[Tribunal](https://github.com/mdressman/tribunal)**:
+- Multi-agent debate protocols (ChatEval, CourtEval, DEBATE)
+- Consistency metrics (IPI, TOV) for evaluation reliability
+- Can be integrated as Tier 3+ for maximum confidence
 
 ## Demo
 
@@ -215,12 +226,14 @@ print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
 
 ## Documentation
 
+- [Architecture Guide](docs/ARCHITECTURE.md) - When to use each detection mode
 - [CLI Reference](docs/cli.md) - All available commands
 - [Detection Logic](docs/detection-logic.md) - Confidence scoring and escalation explained
 - [Rule Generation](docs/rule-generation.md) - AI-powered rule generation
 - [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
-- [Comparison Report](docs/comparison-report.md) - Benchmark results
 - [Roadmap](docs/roadmap.md) - Future features and ideas
+
+See also: [Tribunal](https://github.com/mdressman/tribunal) - Multi-agent LLM-as-judge framework (companion project)
 
 ## License
 

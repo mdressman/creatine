@@ -324,6 +324,13 @@ spec:
 
 ## Recently Completed ✅
 
+- **Tribunal**: Multi-agent LLM-as-judge framework extracted to [separate package](https://github.com/mdressman/tribunal)
+  - 5 debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
+  - IPI/TOV consistency metrics for evaluation reliability
+  - SecurityResearcher domain expert with MITRE ATT&CK alignment
+- **Comprehensive Obfuscation Detection**: 9 decoding techniques
+  - ROT13, Base64, Hex, URL, spacing, reversed, zero-width, HTML, Morse
+  - Uses langdetect for meaningful text detection
 - **Auto-Learning Pipeline**: Generate rules from production logs (`creatine learn`)
 - **Adaptive Detection**: Tiered escalation with ~85% cost savings
 - **Multi-Agent Orchestration**: Pipeline, ParallelExecutor, ConditionalRouter
