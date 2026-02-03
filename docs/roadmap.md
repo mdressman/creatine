@@ -324,6 +324,14 @@ spec:
 
 ## Recently Completed ✅
 
+- **Multi-Agent Meta-Evaluation**: MoE architecture with LLM-as-judge
+  - 5 debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
+  - IPI/TOV consistency metrics for evaluation reliability
+  - RL-based weight tuning, Bayesian hyperparameter optimization
+  - REST API for evaluation, metrics, and agent management
+- **Comprehensive Obfuscation Detection**: 9 decoding techniques
+  - ROT13, Base64, Hex, URL, spacing, reversed, zero-width, HTML, Morse
+  - Uses langdetect for meaningful text detection
 - **Auto-Learning Pipeline**: Generate rules from production logs (`creatine learn`)
 - **Adaptive Detection**: Tiered escalation with ~85% cost savings
 - **Multi-Agent Orchestration**: Pipeline, ParallelExecutor, ConditionalRouter

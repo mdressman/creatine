@@ -10,20 +10,20 @@ This demo showcases Creatine's prompt security capabilities for detecting prompt
 # Activate environment
 source venv/bin/activate
 
-# Interactive menu (select sections)
-python demo/interactive_demo.py
+# Detection Demo
+python demo/interactive_demo.py          # Interactive menu
+python demo/interactive_demo.py --quick  # Quick 2-minute demo
+python demo/interactive_demo.py --full   # Full demo
 
-# Quick 2-minute demo
-python demo/interactive_demo.py --quick
-
-# Full demo (all sections)
-python demo/interactive_demo.py --full
-
-# Run specific section
-python demo/interactive_demo.py --section 3  # Multi-agent orchestration
+# Meta-Evaluation Demo (NEW)
+python demo/meta_eval_demo.py            # Multi-agent evaluation framework
+python demo/meta_eval_demo.py --quick    # Quick overview
+python demo/meta_eval_demo.py --full     # Full with LLM calls
 ```
 
 ## Demo Sections
+
+### Detection Demo (`interactive_demo.py`)
 
 | # | Section | Duration | Description |
 |---|---------|----------|-------------|
@@ -33,6 +33,16 @@ python demo/interactive_demo.py --section 3  # Multi-agent orchestration
 | 4 | Forensics Analysis | 3 min | Attack technique breakdown |
 | 5 | CLI Commands | 2 min | Full CLI reference |
 | 6 | Python API | 2 min | Integration examples |
+
+### Meta-Evaluation Demo (`meta_eval_demo.py`)
+
+| Section | Description |
+|---------|-------------|
+| Agent Management | Expert judge personas, weights, roles |
+| Debate Protocols | ChatEval, CourtEval, DEBATE, MoA, Consensus |
+| Consistency Metrics | IPI (flip detection), TOV (transitivity) |
+| Aggregation Methods | Majority vote, weighted score, unanimous, synthesis |
+| REST API | Endpoints for evaluation and metrics |
 
 ## Key Talking Points
 
@@ -99,3 +109,43 @@ python creatine.py learn logs/*.jsonl -v
 # 3. New rules are generated from patterns LLM caught but keywords missed
 # Output: creatine/rules/learned_rules.nov
 ```
+
+## Meta-Evaluation Framework
+
+Use multi-agent LLM-as-judge for more reliable evaluations:
+
+```python
+from meta_eval import AgentManager, DebateEngine
+from meta_eval.schemas import EvaluationRequest, CandidateOutput, DebateProtocol
+
+# Initialize with expert agents
+manager = AgentManager()  # Loads Safety, Security, Factuality agents
+engine = DebateEngine(manager)
+
+# Evaluate with debate protocol
+request = EvaluationRequest(
+    prompt="Original prompt",
+    candidate_outputs=[CandidateOutput(content="Model response")],
+    protocol=DebateProtocol.COURTEVAL,  # Adversarial prosecution/defense
+)
+result = await engine.evaluate(request)
+
+print(f"Verdict: {result.verdict}, Confidence: {result.confidence}")
+```
+
+### API Server
+
+```bash
+# Start the meta-eval API
+python -m meta_eval.api.server
+
+# Evaluate via API
+curl -X POST http://localhost:8000/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "...", "candidate_outputs": [{"content": "..."}]}'
+
+# Get consistency metrics
+curl http://localhost:8000/metrics
+```
+
+See `meta_eval/README.md` for complete documentation.

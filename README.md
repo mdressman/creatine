@@ -10,6 +10,12 @@
   - Tier 3: LLM (~6s) - Azure OpenAI catches sophisticated attacks
   - **~85% cost savings** compared to always running full analysis
 
+- **Multi-Agent Meta-Evaluation** *(NEW)*: MoE architecture with LLM-as-judge
+  - Multiple debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
+  - Consistency metrics (IPI, TOV) for evaluation reliability
+  - RL-based weight tuning and Bayesian hyperparameter optimization
+  - REST API for evaluation, metrics, and agent management
+
 - **Self-Improving Detection**: Automatically logs all detections and learns from gaps
   - Identifies attacks caught by LLM but missed by keywords
   - Clusters similar attack patterns using embeddings
@@ -24,6 +30,10 @@
   - Identifies specific attack techniques (role hijacking, instruction override, etc.)
   - Provides severity assessment and risk scoring
   - Generates actionable recommendations
+
+- **Comprehensive Obfuscation Detection**: 9 decoding techniques
+  - ROT13, Base64, Hex, URL encoding, Character spacing
+  - Reversed text, Zero-width chars, HTML entities, Morse/Binary
 
 - **Production Ready**: Clean CLI, Python API, and batch processing
   - Import datasets from HuggingFace, CSV, or PromptIntel feeds
@@ -180,6 +190,14 @@ creatine/
 │   ├── forensics.py         # Attack forensics analysis
 │   ├── learning.py          # Adaptive learning pipeline
 │   └── orchestrator.py      # Multi-agent orchestration
+├── meta_eval/               # Multi-Agent Meta-Evaluation Framework
+│   ├── schemas.py           # Data structures (AgentConfig, EvaluationRequest)
+│   ├── agents/              # AgentManager for judge lifecycle
+│   ├── debate/              # Debate protocols (ChatEval, CourtEval, etc.)
+│   ├── consistency/         # IPI/TOV consistency metrics
+│   ├── training/            # RL trainer and Bayesian optimizer
+│   ├── api/                 # REST API server
+│   └── tests/               # Framework tests
 ├── testing/                 # Testing framework
 │   ├── dataset.py           # Dataset management
 │   └── harness.py           # Test runner with metrics
@@ -219,6 +237,7 @@ print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
 - [Detection Logic](docs/detection-logic.md) - Confidence scoring and escalation explained
 - [Rule Generation](docs/rule-generation.md) - AI-powered rule generation
 - [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
+- [Meta-Evaluation](meta_eval/README.md) - Multi-agent LLM-as-judge framework
 - [Comparison Report](docs/comparison-report.md) - Benchmark results
 - [Roadmap](docs/roadmap.md) - Future features and ideas
 
