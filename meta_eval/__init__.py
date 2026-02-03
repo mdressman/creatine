@@ -33,6 +33,10 @@ from .schemas import (
     EvaluationRequest, EvaluationResult, CandidateOutput,
     DebateProtocol, AggregationMethod, DebateConfig,
     ConsistencyMetrics, AgentVote, DebateRound,
+    EvaluationRubric,
+    # Domain experts
+    SAMPLE_AGENTS, DOMAIN_EXPERT_AGENTS,
+    SECURITY_RESEARCHER_AGENT, CYBER_SECURITY_RUBRIC,
 )
 from .agents.manager import AgentManager
 from .debate.debate_engine import DebateEngine
@@ -57,6 +61,13 @@ __all__ = [
     'ConsistencyMetrics',
     'AgentVote',
     'DebateRound',
+    'EvaluationRubric',
+    
+    # Pre-built agents
+    'SAMPLE_AGENTS',
+    'DOMAIN_EXPERT_AGENTS',
+    'SECURITY_RESEARCHER_AGENT',
+    'CYBER_SECURITY_RUBRIC',
     
     # Core components
     'AgentManager',
