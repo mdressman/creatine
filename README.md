@@ -36,7 +36,7 @@
 
 ## Related: Meta-Eval
 
-For high-stakes decisions requiring multi-agent LLM-as-judge evaluation, see the companion project **[meta-eval](https://github.com/mdressman/meta-eval)**:
+For high-stakes decisions requiring multi-agent LLM-as-judge evaluation, see the companion project **[tribunal](https://github.com/mdressman/tribunal)**:
 - Multi-agent debate protocols (ChatEval, CourtEval, DEBATE)
 - Consistency metrics (IPI, TOV) for evaluation reliability
 - Can be integrated as Tier 3+ for maximum confidence
@@ -191,14 +191,6 @@ creatine/
 │   ├── forensics.py         # Attack forensics analysis
 │   ├── learning.py          # Adaptive learning pipeline
 │   └── orchestrator.py      # Multi-agent orchestration
-├── meta_eval/               # Multi-Agent Meta-Evaluation Framework
-│   ├── schemas.py           # Data structures (AgentConfig, EvaluationRequest)
-│   ├── agents/              # AgentManager for judge lifecycle
-│   ├── debate/              # Debate protocols (ChatEval, CourtEval, etc.)
-│   ├── consistency/         # IPI/TOV consistency metrics
-│   ├── training/            # RL trainer and Bayesian optimizer
-│   ├── api/                 # REST API server
-│   └── tests/               # Framework tests
 ├── testing/                 # Testing framework
 │   ├── dataset.py           # Dataset management
 │   └── harness.py           # Test runner with metrics
@@ -238,9 +230,10 @@ print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
 - [Detection Logic](docs/detection-logic.md) - Confidence scoring and escalation explained
 - [Rule Generation](docs/rule-generation.md) - AI-powered rule generation
 - [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
-- [Meta-Evaluation](meta_eval/README.md) - Multi-agent LLM-as-judge framework
-- [Comparison Report](docs/comparison-report.md) - Benchmark results
+- [Architecture](docs/ARCHITECTURE.md) - System architecture and when to use each mode
 - [Roadmap](docs/roadmap.md) - Future features and ideas
+
+See also: [Tribunal](https://github.com/mdressman/tribunal) - Multi-agent LLM-as-judge framework (companion project)
 
 ## License
 

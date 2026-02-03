@@ -324,7 +324,7 @@ spec:
 
 ## Recently Completed ✅
 
-- **Multi-Agent Meta-Evaluation**: Extracted to standalone package [meta-eval](https://github.com/mdressman/meta-eval)
+- **Multi-Agent Meta-Evaluation**: Extracted to standalone package [tribunal](https://github.com/mdressman/tribunal)
   - 5 debate protocols (ChatEval, CourtEval, DEBATE, MoA, Consensus)
   - IPI/TOV consistency metrics for evaluation reliability
   - RL-based weight tuning, Bayesian hyperparameter optimization

@@ -33,8 +33,8 @@ This guide explains the different detection and evaluation modes in Creatine and
                                     │
                                     ▼ (optional integration)
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│              meta-eval (External Package - Multi-Agent Judge Panel)         │
-│              https://github.com/mdressman/meta-eval                         │
+│              tribunal (External Package - Multi-Agent Judge Panel)         │
+│              https://github.com/mdressman/tribunal                         │
 │                                                                             │
 │   DebateEngine: MoE consensus with 5 debate protocols                       │
 │   ConsistencyChecker: IPI/TOV reliability metrics                           │
@@ -118,10 +118,10 @@ result = await pipeline.execute(prompt)
 
 **Use for:** High-stakes decisions requiring calibrated confidence
 
-Install separately: `pip install meta-eval` (see [github.com/mdressman/meta-eval](https://github.com/mdressman/meta-eval))
+Install separately: `pip install tribunal` (see [github.com/mdressman/tribunal](https://github.com/mdressman/tribunal))
 
 ```python
-from meta_eval import AgentManager, DebateEngine, EvaluationRequest, CandidateOutput
+from tribunal import AgentManager, DebateEngine, EvaluationRequest, CandidateOutput
 
 manager = AgentManager()
 engine = DebateEngine(manager)
@@ -154,14 +154,14 @@ result = await engine.evaluate(request)
 
 ### Integration Pattern
 
-For maximum accuracy on critical prompts (requires `pip install meta-eval`):
+For maximum accuracy on critical prompts (requires `pip install tribunal`):
 
 ```python
 from creatine import AdaptiveDetector
 from agents.forensics import ForensicsAgent
 
-# Optional: pip install meta-eval
-from meta_eval import AgentManager, DebateEngine, SECURITY_RESEARCHER_AGENT, EvaluationRequest, CandidateOutput
+# Optional: pip install tribunal
+from tribunal import AgentManager, DebateEngine, SECURITY_RESEARCHER_AGENT, EvaluationRequest, CandidateOutput
 
 # Stage 1: Fast detection
 detector = AdaptiveDetector()
