@@ -15,6 +15,11 @@ import asyncio
 import sys
 import os
 import time
+import logging
+
+# Suppress noisy Azure identity logs
+logging.getLogger('azure.identity').setLevel(logging.ERROR)
+logging.getLogger('azure.core').setLevel(logging.ERROR)
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
