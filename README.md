@@ -1,6 +1,6 @@
 # Creatine
 
-**A self-improving prompt security platform** that detects prompt injection and jailbreak attacks through adaptive multi-tier detection. Automatically learns from production traffic to continuously strengthen defenses while optimizing costs.
+**A self-improving, community-backed prompt security platform** that detects prompt injection and jailbreak attacks through adaptive multi-tier detection. Built on [Nova](https://github.com/Nova-Hunting/nova-rules) pattern matching, it combines curated community rules, semantic analysis, and LLM reasoning — then automatically learns from production traffic to continuously strengthen defenses while optimizing costs.
 
 ## Features
 
@@ -10,10 +10,17 @@
   - Tier 3: LLM (~6s) - Azure OpenAI catches sophisticated attacks
   - **~85% cost savings** compared to always running full analysis
 
+- **Community-Backed Rules**: Inherits from the [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) community repository
+  - One command to sync: `python creatine.py sync-rules`
+  - 50+ community rules covering injection, jailbreak, TTPs, policy puppetry, unicode attacks, and more
+  - Automatically loaded alongside default rules — no configuration needed
+  - Pull latest anytime to inherit new rules as the community contributes them
+
 - **Self-Improving Detection**: Automatically logs all detections and learns from gaps
   - Identifies attacks caught by LLM but missed by keywords
   - Clusters similar attack patterns using embeddings
-  - Generates new rules to catch future variants faster
+  - Generates new Nova rules to catch future variants faster
+  - Three rule layers work together: **default** (built-in) → **community** (Nova-Hunting) → **generated** (self-learned)
   
 - **Multi-Agent Orchestration**: Composable detection pipelines
   - Sequential pipelines (detect → forensics → log)
@@ -98,6 +105,9 @@ PROMPTINTEL_API_KEY=your-api-key  # Optional, for feed sync
 ### Basic Usage
 
 ```bash
+# Sync community rules (one-time setup, then run periodically)
+python creatine.py sync-rules
+
 # Quick single-prompt analysis (adaptive by default)
 python creatine.py detect "Ignore all previous instructions"
 # Output: 🚨 THREAT | High | 90% confidence | Tier: SEMANTICS | 158ms
@@ -125,6 +135,29 @@ python creatine.py generate-rules --test-dataset common_jailbreaks
 
 # Learn from accumulated detection logs
 python creatine.py learn logs/detections_*.jsonl -v
+```
+
+## Rule Architecture
+
+Creatine loads rules from three sources, layered for breadth and adaptability:
+
+| Source | Path | Updated via | Purpose |
+|--------|------|-------------|---------|
+| **Default** | `creatine/rules/default.nov` | Manual edits | Built-in keyword, semantic, and LLM rules |
+| **Community** | `creatine/rules/community/` | `python creatine.py sync-rules` | [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) — 50+ rules from the community |
+| **Generated** | `creatine/rules/feed_generated.nov`, `learned_rules.nov` | `sync-feed`, `learn`, `generate-rules` | Self-improving rules from threat feeds and production logs |
+
+All three sources are loaded automatically on startup. Community rules require a one-time `sync-rules` to clone the repo; subsequent runs pull the latest.
+
+```bash
+# Sync community rules from Nova-Hunting/nova-rules
+python creatine.py sync-rules
+
+# Sync from a custom rules repo
+python creatine.py sync-rules --repo https://github.com/your-org/your-rules.git
+
+# Update to latest
+python creatine.py sync-rules  # pulls if already cloned
 ```
 
 ## Automatic Learning Pipeline
@@ -186,6 +219,10 @@ creatine/
 │   ├── models.py            # Data classes
 │   ├── feed.py              # PromptIntel feed client
 │   └── rules/               # Nova rule files (.nov)
+│       ├── default.nov      # Built-in rules (keyword + semantic + LLM)
+│       ├── community/       # Community rules (via sync-rules)
+│       ├── feed_generated.nov   # From threat feed sync
+│       └── learned_rules.nov    # From learning pipeline
 ├── agents/                  # AI agents
 │   ├── rule_generator.py    # Rule generation agent
 │   ├── forensics.py         # Attack forensics analysis

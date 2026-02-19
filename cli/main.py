@@ -492,6 +492,47 @@ def cmd_sync_feed(args):
         print(f"Error: {e}")
 
 
+def cmd_sync_rules(args):
+    """Sync community rules from the Nova-Hunting/nova-rules repository."""
+    import subprocess
+    from creatine.detector import COMMUNITY_RULES_DIR, NOVA_RULES_REPO
+    
+    repo_url = args.repo or NOVA_RULES_REPO
+    target_dir = Path(args.output) if args.output else COMMUNITY_RULES_DIR
+    
+    if target_dir.exists() and (target_dir / ".git").exists():
+        # Pull latest
+        print(f"Updating community rules in {target_dir}...")
+        result = subprocess.run(
+            ["git", "-C", str(target_dir), "pull", "--ff-only"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"Error pulling updates: {result.stderr.strip()}")
+            return
+        print(f"✓ Updated to latest")
+    else:
+        # Clone
+        print(f"Cloning community rules from {repo_url}...")
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["git", "clone", repo_url, str(target_dir)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"Error cloning repository: {result.stderr.strip()}")
+            return
+        print(f"✓ Cloned to {target_dir}")
+    
+    # Count .nov files
+    nov_files = list(target_dir.rglob("*.nov"))
+    print(f"✓ {len(nov_files)} rule files available")
+    
+    if args.verbose:
+        for f in sorted(nov_files):
+            print(f"  - {f.relative_to(target_dir)}")
+
+
 def cmd_forensics(args):
     """Run forensic analysis on a prompt."""
     from agents import ForensicsAgent
@@ -671,6 +712,12 @@ Examples:
     p.add_argument("--smart", action="store_true", help="Use AI for rule generation")
     p.add_argument("-v", "--verbose", action="store_true")
     
+    # sync-rules
+    p = subparsers.add_parser("sync-rules", help="Sync community rules from Nova-Hunting/nova-rules")
+    p.add_argument("--repo", help="Git repo URL (default: Nova-Hunting/nova-rules)")
+    p.add_argument("-o", "--output", help="Target directory for cloned rules")
+    p.add_argument("-v", "--verbose", action="store_true")
+    
     # forensics
     p = subparsers.add_parser("forensics", help="Deep forensic analysis of a prompt")
     p.add_argument("prompt", help="Prompt to analyze")
@@ -714,6 +761,7 @@ Examples:
         "import-csv": cmd_import_csv,
         "generate-rules": cmd_generate_rules,
         "sync-feed": cmd_sync_feed,
+        "sync-rules": cmd_sync_rules,
         "forensics": cmd_forensics,
         "learn": cmd_learn,
     }

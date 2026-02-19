@@ -17,8 +17,11 @@ from .evaluators import AzureEntraLLMEvaluator, create_semantic_evaluator
 # Default paths for rule files
 RULES_DIR = Path(__file__).parent / "rules"
 DEFAULT_RULES_PATH = RULES_DIR / "default.nov"
-ADVANCED_RULES_PATH = RULES_DIR / "advanced.nov"
 FEED_RULES_PATH = RULES_DIR / "feed_generated.nov"
+COMMUNITY_RULES_DIR = RULES_DIR / "community"
+
+# Default community rules repo
+NOVA_RULES_REPO = "https://github.com/Nova-Hunting/nova-rules.git"
 
 
 @contextmanager
@@ -56,6 +59,7 @@ class ThreatDetector:
         verbose: bool = False, 
         rules_path: Optional[Path] = None,
         include_feed_rules: bool = True,
+        include_community_rules: bool = True,
         enable_llm: bool = False,
         enable_semantics: bool = False,
         quiet: bool = False,
@@ -67,6 +71,7 @@ class ThreatDetector:
             verbose: Print detailed match info
             rules_path: Path to .nov rules file (uses default if not provided)
             include_feed_rules: Whether to also load feed-generated rules
+            include_community_rules: Whether to load community rules from nova-rules repo
             enable_llm: Enable LLM-based rule evaluation (requires Azure OpenAI)
             enable_semantics: Enable semantic similarity matching
             quiet: Suppress initialization messages (still shows analysis output if verbose)
@@ -115,12 +120,11 @@ class ThreatDetector:
             self.load_rules_file(FEED_RULES_PATH)
             self._rules_loaded.append(str(FEED_RULES_PATH))
         
-        # Load advanced rules if semantic/LLM evaluation is enabled
-        if (enable_llm or enable_semantics) and ADVANCED_RULES_PATH.exists():
-            if verbose and not quiet:
-                print(f"Loading advanced rules from: {ADVANCED_RULES_PATH}")
-            self.load_rules_file(ADVANCED_RULES_PATH)
-            self._rules_loaded.append(str(ADVANCED_RULES_PATH))
+        # Load community rules (from nova-rules repo) if available
+        if include_community_rules and COMMUNITY_RULES_DIR.exists():
+            count = self.load_rules_directory(COMMUNITY_RULES_DIR)
+            if count > 0 and verbose and not quiet:
+                print(f"Loaded {count} community rule files from: {COMMUNITY_RULES_DIR}")
     
     @property
     def rules_info(self) -> str:
@@ -132,16 +136,20 @@ class ThreatDetector:
         rules = []
         current_rule = []
         brace_count = 0
+        entered_braces = False
         
         for line in rules_text.split('\n'):
             current_rule.append(line)
             brace_count += line.count('{') - line.count('}')
+            if brace_count > 0:
+                entered_braces = True
             
-            if brace_count == 0 and current_rule:
+            if brace_count == 0 and entered_braces and current_rule:
                 rule_text = '\n'.join(current_rule).strip()
                 if rule_text.startswith('rule '):
                     rules.append(rule_text)
                 current_rule = []
+                entered_braces = False
         
         return rules
     
@@ -230,6 +238,22 @@ class ThreatDetector:
                 except Exception as e:
                     if self.verbose:
                         print(f"Warning: Failed to parse rule from {path}: {e}")
+    
+    def load_rules_directory(self, directory: Path) -> int:
+        """Load all .nov rule files from a directory (recursively).
+        
+        Returns the number of rule files loaded.
+        """
+        count = 0
+        for nov_file in sorted(directory.rglob("*.nov")):
+            try:
+                self.load_rules_file(nov_file)
+                self._rules_loaded.append(str(nov_file))
+                count += 1
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: Failed to load {nov_file}: {e}")
+        return count
     
     async def close(self):
         """Clean up resources."""

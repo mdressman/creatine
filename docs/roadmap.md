@@ -291,7 +291,7 @@ spec:
   mode: balanced
   rules:
     - default
-    - advanced
+    - community
   alerting:
     slack: "#security-alerts"
 ```

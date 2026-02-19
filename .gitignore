@@ -14,6 +14,9 @@ reports/
 # Detection logs (for learning pipeline)
 logs/
 
+# Community rules (cloned via sync-rules)
+creatine/rules/community/
+
 # Large datasets (keep only small curated ones)
 datasets/neuralchemy_*.json
 
