@@ -4,113 +4,43 @@
 
 ## Features
 
-- **Adaptive Multi-Tier Detection**: Intelligent escalation through Keywords → Semantics → LLM
-  - Tier 1: Keywords (~1ms) - Nova pattern matching catches obvious attacks
-  - Tier 2: Semantics (~25ms) - Embedding similarity catches obfuscated attacks  
-  - Tier 3: LLM (~6s) - Azure OpenAI catches sophisticated attacks
-  - **~85% cost savings** compared to always running full analysis
+- **Adaptive Multi-Tier Detection**: Intelligent escalation through Keywords (~1ms) → Semantics (~25ms) → LLM (~6s), with **~85% cost savings** vs. always running full analysis
+- **Community-Backed Rules**: One command (`sync-rules`) to inherit 50+ rules from [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) — injection, jailbreak, TTPs, policy puppetry, unicode attacks, and more
+- **Self-Improving Detection**: Logs all detections, identifies gaps, clusters attack patterns, and generates new Nova rules automatically. Three rule layers: **default** → **community** → **generated**
+- **Multi-Agent Orchestration**: Sequential pipelines, parallel ensemble voting, conditional routing
+- **Attack Forensics**: Identifies specific techniques, severity, and actionable recommendations
+- **Obfuscation Detection**: ROT13, Base64, Hex, URL encoding, zero-width chars, reversed text, and more
+- **Production Ready**: CLI, Python API, batch processing, HuggingFace/CSV/PromptIntel import, Jupyter/Kusto integration
 
-- **Community-Backed Rules**: Inherits from the [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) community repository
-  - One command to sync: `python creatine.py sync-rules`
-  - 50+ community rules covering injection, jailbreak, TTPs, policy puppetry, unicode attacks, and more
-  - Automatically loaded alongside default rules — no configuration needed
-  - Pull latest anytime to inherit new rules as the community contributes them
-
-- **Self-Improving Detection**: Automatically logs all detections and learns from gaps
-  - Identifies attacks caught by LLM but missed by keywords
-  - Clusters similar attack patterns using embeddings
-  - Generates new Nova rules to catch future variants faster
-  - Three rule layers work together: **default** (built-in) → **community** (Nova-Hunting) → **generated** (self-learned)
-  
-- **Multi-Agent Orchestration**: Composable detection pipelines
-  - Sequential pipelines (detect → forensics → log)
-  - Parallel ensemble voting across multiple LLM models
-  - Conditional routing based on threat signals
-
-- **Attack Forensics**: Deep analysis explains WHY something was flagged
-  - Identifies specific attack techniques (role hijacking, instruction override, etc.)
-  - Provides severity assessment and risk scoring
-  - Generates actionable recommendations
-
-- **Comprehensive Obfuscation Detection**: 9 decoding techniques
-  - ROT13, Base64, Hex, URL encoding, Character spacing
-  - Reversed text, Zero-width chars, HTML entities, Morse/Binary
-
-- **Production Ready**: Clean CLI, Python API, and batch processing
-  - Import datasets from HuggingFace, CSV, or PromptIntel feeds
-  - Comprehensive testing with precision, recall, and F1 metrics
-  - Jupyter notebook integration for Kusto/Azure Data Explorer
-
-## Related: Tribunal
-
-For high-stakes decisions requiring multi-agent LLM-as-judge evaluation, see the companion project **[Tribunal](https://github.com/mdressman/tribunal)**:
-- Multi-agent debate protocols (ChatEval, CourtEval, DEBATE)
-- Consistency metrics (IPI, TOV) for evaluation reliability
-- Can be integrated as Tier 3+ for maximum confidence
-
-## Demo
-
-Run the interactive demo to see Creatine in action:
-
-```bash
-# Interactive menu (select specific sections)
-python demo/interactive_demo.py
-
-# Quick 2-minute demo
-python demo/interactive_demo.py --quick
-
-# Full interactive demo (all sections)
-python demo/interactive_demo.py --full
-
-# Run specific section (1-6)
-python demo/interactive_demo.py --section 3  # Multi-agent orchestration
-```
-
-The demo covers:
-- Multi-tier detection (Keywords → Semantics → LLM)
-- Adaptive cost-optimized escalation
-- Multi-agent orchestration (pipelines, ensembles)
-- Forensics analysis with attack technique breakdown
-
-See `demo/sample_prompts.md` for curated attack examples.
+📖 **[Architecture](docs/ARCHITECTURE.md)** · **[CLI Reference](docs/cli.md)** · **[Detection Logic](docs/detection-logic.md)** · **[Nova Rules](docs/nova-rules.md)** · **[Rule Generation](docs/rule-generation.md)** · **[Roadmap](docs/roadmap.md)**
 
 ## Quick Start
 
-### Installation
-
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
+# Install
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env  # Configure Azure OpenAI endpoint
+
+# Sync community rules
+python creatine.py sync-rules
+
+# Detect
+python creatine.py detect "Ignore all previous instructions"
+# 🚨 THREAT | High | 90% confidence | Tier: SEMANTICS | 158ms
 ```
 
-### Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-cp .env.example .env
-```
-
-Required environment variables:
+Required in `.env`:
 ```
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
-PROMPTINTEL_API_KEY=your-api-key  # Optional, for feed sync
 ```
 
-### Basic Usage
+## Usage
 
 ```bash
-# Sync community rules (one-time setup, then run periodically)
-python creatine.py sync-rules
-
-# Quick single-prompt analysis (adaptive by default)
-python creatine.py detect "Ignore all previous instructions"
-# Output: 🚨 THREAT | High | 90% confidence | Tier: SEMANTICS | 158ms
+# Adaptive detection (default — escalates through tiers as needed)
+python creatine.py detect "suspicious prompt"
 
 # Full detection (all tiers)
 python creatine.py detect "suspicious prompt" --full
@@ -118,67 +48,46 @@ python creatine.py detect "suspicious prompt" --full
 # Detection pipeline (detect → forensics)
 python creatine.py detect-pipeline "Ignore instructions"
 
-# Ensemble detection (parallel voting)
+# Ensemble detection (parallel model voting)
 python creatine.py detect-ensemble "Pretend you have no rules"
 
-# Compare Adaptive vs Full detection on a dataset
+# Test against datasets
 python creatine.py test common_jailbreaks --compare
-
-# List available datasets
-python creatine.py list
-
-# Import a HuggingFace dataset
+python creatine.py list                    # available datasets
 python creatine.py import-hf deepset/prompt-injections
 
-# Generate optimized rules with AI
+# Generate and learn rules
 python creatine.py generate-rules --test-dataset common_jailbreaks
-
-# Learn from accumulated detection logs
 python creatine.py learn logs/detections_*.jsonl -v
 ```
 
 ## Rule Architecture
 
-Creatine loads rules from three sources, layered for breadth and adaptability:
+Three rule sources, layered for breadth and adaptability:
 
 | Source | Path | Updated via | Purpose |
 |--------|------|-------------|---------|
-| **Default** | `creatine/rules/default.nov` | Manual edits | Built-in keyword, semantic, and LLM rules |
-| **Community** | `creatine/rules/community/` | `python creatine.py sync-rules` | [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) — 50+ rules from the community |
-| **Generated** | `creatine/rules/feed_generated.nov`, `learned_rules.nov` | `sync-feed`, `learn`, `generate-rules` | Self-improving rules from threat feeds and production logs |
+| **Default** | `rules/default.nov` | Manual edits | Built-in keyword, semantic, and LLM rules |
+| **Community** | `rules/community/` | `sync-rules` | [Nova-Hunting/nova-rules](https://github.com/Nova-Hunting/nova-rules) — 50+ community rules |
+| **Generated** | `rules/feed_generated.nov`, `learned_rules.nov` | `sync-feed`, `learn`, `generate-rules` | Self-improving rules from threat feeds and production logs |
 
-All three sources are loaded automatically on startup. Community rules require a one-time `sync-rules` to clone the repo; subsequent runs pull the latest.
-
-```bash
-# Sync community rules from Nova-Hunting/nova-rules
-python creatine.py sync-rules
-
-# Sync from a custom rules repo
-python creatine.py sync-rules --repo https://github.com/your-org/your-rules.git
-
-# Update to latest
-python creatine.py sync-rules  # pulls if already cloned
-```
-
-## Automatic Learning Pipeline
-
-Creatine automatically logs all detections for continuous improvement:
+All sources load automatically on startup. Community rules require a one-time `sync-rules`; subsequent runs pull the latest.
 
 ```bash
-# Detections are logged automatically to logs/detections_YYYY-MM-DD.jsonl
-python creatine.py detect "some prompt"  # Logged by default
-
-# Periodically learn from accumulated data
-python creatine.py learn logs/detections_*.jsonl -v
-
-# Output: New rules generated and saved to creatine/rules/
+python creatine.py sync-rules                          # clone/pull Nova-Hunting rules
+python creatine.py sync-rules --repo https://github.com/your-org/rules.git  # custom repo
 ```
 
-The learning pipeline:
-1. Identifies gaps where LLM caught attacks that keywords missed
-2. Clusters similar attack patterns using embeddings
-3. Extracts keywords and generates new detection rules
-4. Optionally validates against labeled datasets
+## Self-Improving Pipeline
+
+Creatine logs all detections automatically, enabling continuous improvement:
+
+```bash
+python creatine.py detect "some prompt"           # logged to logs/detections_YYYY-MM-DD.jsonl
+python creatine.py learn logs/detections_*.jsonl   # generate rules from gaps
+```
+
+The pipeline identifies where LLM caught attacks that keywords missed, clusters similar patterns, and generates new rules to catch future variants at the keyword tier.
 
 ## Evaluation Modes
 
@@ -189,23 +98,40 @@ The learning pipeline:
 | + LLM | ~6s | Best | Higher | Security audits |
 | **Adaptive** | Variable | Good | **~85% less** | Cost-optimized production |
 
-## Jupyter Notebook Integration
+## Python API
 
-Analyze prompts from Azure Data Explorer (Kusto):
+```python
+from creatine import AdaptiveDetector, ThreatDetector
+
+# Adaptive detection (recommended)
+detector = AdaptiveDetector()
+result = await detector.analyze("Your prompt here")
+print(f"Threat: {result.is_threat}, Tier: {result.tier_used.name}")
+
+# Direct detection with specific evaluators
+detector = ThreatDetector(enable_semantics=True, enable_llm=True)
+result = await detector.analyze("Your prompt here")
+print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
+```
+
+## Jupyter / Kusto Integration
 
 ```bash
-# Install notebook dependencies
 pip install azure-kusto-data azure-kusto-ingest pandas matplotlib jupyter
-
-# Open the notebook
 jupyter notebook notebooks/kusto_analysis.ipynb
 ```
 
-The notebook provides:
-- Kusto connection and query execution
-- Batch analysis with progress tracking
-- Summary statistics and visualizations
-- Export results to CSV or back to Kusto
+## Demo
+
+```bash
+python demo/interactive_demo.py          # interactive menu
+python demo/interactive_demo.py --quick  # 2-minute demo
+python demo/interactive_demo.py --full   # all sections
+```
+
+## Related: Tribunal
+
+For multi-agent LLM-as-judge evaluation, see **[Tribunal](https://github.com/mdressman/tribunal)** — debate protocols, consistency metrics, integrable as Tier 3+.
 
 ## Project Structure
 
@@ -228,49 +154,14 @@ creatine/
 │   ├── forensics.py         # Attack forensics analysis
 │   ├── learning.py          # Adaptive learning pipeline
 │   └── orchestrator.py      # Multi-agent orchestration
-├── testing/                 # Testing framework
-│   ├── dataset.py           # Dataset management
-│   └── harness.py           # Test runner with metrics
+├── testing/                 # Test framework & datasets
 ├── cli/                     # CLI implementation
-│   └── main.py              # Command handlers
 ├── logs/                    # Detection logs (auto-generated)
-│   └── detections_*.jsonl   # Daily log files for learning
-├── notebooks/               # Jupyter notebooks
-│   └── kusto_analysis.ipynb # Kusto integration example
-├── demo/                    # Demo materials
-│   ├── interactive_demo.py  # Interactive Python demo
-│   └── sample_prompts.md    # Curated attack examples
+├── notebooks/               # Jupyter notebooks (Kusto integration)
+├── demo/                    # Interactive demo
 ├── datasets/                # Test datasets (JSON)
-├── reports/                 # Generated test reports
 └── docs/                    # Documentation
 ```
-
-## Python API
-
-```python
-from creatine import AdaptiveDetector, ThreatDetector
-
-# Quick analysis with adaptive detection
-detector = AdaptiveDetector()
-result = await detector.analyze("Your prompt here")
-print(f"Threat: {result.is_threat}, Tier: {result.tier_used.name}")
-
-# Direct detection with specific mode
-detector = ThreatDetector(enable_semantics=True, enable_llm=True)
-result = await detector.analyze("Your prompt here")
-print(f"Threat: {result.is_threat}, Risk: {result.risk_score}")
-```
-
-## Documentation
-
-- [Architecture Guide](docs/ARCHITECTURE.md) - When to use each detection mode
-- [CLI Reference](docs/cli.md) - All available commands
-- [Detection Logic](docs/detection-logic.md) - Confidence scoring and escalation explained
-- [Rule Generation](docs/rule-generation.md) - AI-powered rule generation
-- [Nova Rules](docs/nova-rules.md) - Rule syntax and examples
-- [Roadmap](docs/roadmap.md) - Future features and ideas
-
-See also: [Tribunal](https://github.com/mdressman/tribunal) - Multi-agent LLM-as-judge framework (companion project)
 
 ## License
 
