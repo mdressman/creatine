@@ -17,7 +17,6 @@ from .evaluators import AzureEntraLLMEvaluator, create_semantic_evaluator
 # Default paths for rule files
 RULES_DIR = Path(__file__).parent / "rules"
 DEFAULT_RULES_PATH = RULES_DIR / "default.nov"
-ADVANCED_RULES_PATH = RULES_DIR / "advanced.nov"
 FEED_RULES_PATH = RULES_DIR / "feed_generated.nov"
 COMMUNITY_RULES_DIR = RULES_DIR / "community"
 
@@ -120,13 +119,6 @@ class ThreatDetector:
                 print(f"Loading feed rules from: {FEED_RULES_PATH}")
             self.load_rules_file(FEED_RULES_PATH)
             self._rules_loaded.append(str(FEED_RULES_PATH))
-        
-        # Load advanced rules if semantic/LLM evaluation is enabled
-        if (enable_llm or enable_semantics) and ADVANCED_RULES_PATH.exists():
-            if verbose and not quiet:
-                print(f"Loading advanced rules from: {ADVANCED_RULES_PATH}")
-            self.load_rules_file(ADVANCED_RULES_PATH)
-            self._rules_loaded.append(str(ADVANCED_RULES_PATH))
         
         # Load community rules (from nova-rules repo) if available
         if include_community_rules and COMMUNITY_RULES_DIR.exists():
